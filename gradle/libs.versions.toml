@@ -1,0 +1,11 @@
+[versions]
+guava = "33.4.8-android"
+android-application = "8.13.0"
+kotlin-android = "2.2.10"
+
+[libraries]
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "android-application" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin-android" }
