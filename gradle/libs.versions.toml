@@ -1,9 +1,13 @@
 [versions]
-guava = "33.4.8-android"
 android-application = "8.13.0"
-kotlin-android = "2.2.10"
+appcompat = "1.7.1"
+guava = "33.5.0-android"
+kotlin-android = "2.2.20"
+ktx = "1.17.0"
 
 [libraries]
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "ktx" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
 
 [plugins]

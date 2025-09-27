@@ -10,16 +10,15 @@ repositories {
 
 dependencies {
     implementation(libs.guava)
-    implementation("androidx.appcompat:appcompat:1.7.1")  // for theme in AndroidManifest.xml
-    implementation("androidx.core:core-ktx:1.17.0")  // fixes jar version conflicts
+    implementation(libs.androidx.appcompat)  // for theme in AndroidManifest.xml
+    implementation(libs.androidx.ktx)  // fixes jar version conflicts
 }
 
 android {
     namespace = "org.righteffort.openvpnscheduler"
     compileSdk = 36
     defaultConfig {
-        applicationId = "org.righteffort.openvpnscheduler"
-        minSdk = 24
+        minSdk = 26
 	targetSdk  = 36
 	versionCode = 1
 	versionName = "0.1"

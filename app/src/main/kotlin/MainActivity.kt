@@ -1,10 +1,14 @@
 package org.righteffort.openvpnscheduler
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.*
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,12 +25,19 @@ import java.util.*
 class MainActivity : AppCompatActivity() {
     private lateinit var urlEditText: EditText
     private lateinit var downloadButton: Button
+    private lateinit var loadConfigButton: Button
     private lateinit var filesContainer: LinearLayout
+    private var currentSchedule: ScheduleStore? = null
     
     companion object {
         private const val PREFS_NAME = "TextDownloaderPrefs"
         private const val KEY_LAST_URL = "last_url"
         private const val DOWNLOADS_DIR = "downloads"
+        private const val CONFIG_FILE = "schedule_config.csv"
+    }
+
+    private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { loadConfigFromUri(it) }
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         
         urlEditText = findViewById(R.id.urlEditText)
         downloadButton = findViewById(R.id.downloadButton)
+        loadConfigButton = findViewById(R.id.loadConfigButton)
         filesContainer = findViewById(R.id.filesContainer)
         
         downloadButton.setOnClickListener {
@@ -45,8 +57,13 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Please enter a URL", Toast.LENGTH_SHORT).show()
             }
         }
+
+        loadConfigButton.setOnClickListener {
+            filePickerLauncher.launch("text/*")
+        }
         
         loadSavedUrl()
+        loadSavedConfig()
         refreshFilesList()
     }
     
@@ -141,7 +158,7 @@ class MainActivity : AppCompatActivity() {
             // Default case
             else -> url.host ?: "downloaded_file"
         }
-	return fileName
+        return fileName
     }
     
     private fun refreshFilesList() {
@@ -246,7 +263,9 @@ class MainActivity : AppCompatActivity() {
     
     private fun saveUrl(url: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_LAST_URL, url).apply()
+        prefs.edit {
+            putString(KEY_LAST_URL, url)
+        }
     }
     
     private fun loadSavedUrl() {
@@ -254,6 +273,48 @@ class MainActivity : AppCompatActivity() {
         val savedUrl = prefs.getString(KEY_LAST_URL, "")
         if (!savedUrl.isNullOrEmpty()) {
             urlEditText.setText(savedUrl)
+        }
+    }
+
+    private fun loadConfigFromUri(uri: Uri) {
+        lifecycleScope.launch {
+            try {
+                val content = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { inputStream ->
+                        inputStream.bufferedReader().readText()
+                    } ?: throw IOException("Could not read file")
+                }
+
+                val schedule = ScheduleStore.fromCsv(content)
+                currentSchedule = schedule
+                saveConfig(schedule)
+                Toast.makeText(this@MainActivity, "Configuration loaded successfully", Toast.LENGTH_LONG).show()
+
+            } catch (e: Exception) {
+                showErrorDialog("Configuration Load Failed", "Failed to load configuration: ${e.message}")
+            }
+        }
+    }
+
+    private fun saveConfig(schedule: ScheduleStore) {
+        try {
+            val configFile = File(filesDir, CONFIG_FILE)
+            configFile.writeText(schedule.toCsv())
+        } catch (e: Exception) {
+            Toast.makeText(this, "Failed to save configuration: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun loadSavedConfig() {
+        try {
+            val configFile = File(filesDir, CONFIG_FILE)
+            if (configFile.exists()) {
+                val content = configFile.readText()
+                currentSchedule = ScheduleStore.fromCsv(content)
+                Toast.makeText(this, "Saved configuration loaded", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "Failed to load saved configuration: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }

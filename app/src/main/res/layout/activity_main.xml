@@ -27,6 +27,7 @@
         android:layout_height="wrap_content"
         android:hint="https://example.com/file.txt"
         android:inputType="textUri"
+	android:importantForAutofill="no"
         android:layout_marginBottom="16dp"/>
 
     <Button
@@ -34,6 +35,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Download File"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/loadConfigButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Load Configuration"
         android:layout_marginBottom="24dp"/>
 
     <TextView
