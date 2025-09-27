@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.parcelize)
 }
 
 repositories {
@@ -14,6 +15,16 @@ dependencies {
     implementation(libs.androidx.ktx)  // fixes jar version conflicts
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    }
+}
+
 android {
     namespace = "org.righteffort.openvpnscheduler"
     compileSdk = 36
@@ -24,12 +35,7 @@ android {
 	versionName = "0.1"
     }
     
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-    
-    kotlinOptions {
-        jvmTarget = "1.8"
+    buildFeatures {
+        aidl = true
     }
 }

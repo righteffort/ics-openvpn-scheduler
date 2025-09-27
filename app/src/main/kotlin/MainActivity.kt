@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loadConfigButton: Button
     private lateinit var filesContainer: LinearLayout
     private var currentSchedule: ScheduleStore? = null
-    
+
     companion object {
         private const val PREFS_NAME = "TextDownloaderPrefs"
         private const val KEY_LAST_URL = "last_url"
@@ -39,16 +39,16 @@ class MainActivity : AppCompatActivity() {
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { loadConfigFromUri(it) }
     }
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        
+
         urlEditText = findViewById(R.id.urlEditText)
         downloadButton = findViewById(R.id.downloadButton)
         loadConfigButton = findViewById(R.id.loadConfigButton)
         filesContainer = findViewById(R.id.filesContainer)
-        
+
         downloadButton.setOnClickListener {
             val urlString = urlEditText.text.toString().trim()
             if (urlString.isNotEmpty()) {
@@ -61,75 +61,75 @@ class MainActivity : AppCompatActivity() {
         loadConfigButton.setOnClickListener {
             filePickerLauncher.launch("text/*")
         }
-        
+
         loadSavedUrl()
         loadSavedConfig()
         refreshFilesList()
     }
-    
+
     private fun downloadFile(urlString: String) {
         lifecycleScope.launch {
             try {
                 saveUrl(urlString)
                 Toast.makeText(this@MainActivity, "Starting download...", Toast.LENGTH_SHORT).show()
-                
+
                 val result = withContext(Dispatchers.IO) {
                     downloadFileFromUrl(urlString)
                 }
-                
+
                 Toast.makeText(this@MainActivity, "Download completed: ${result.name}", Toast.LENGTH_LONG).show()
                 refreshFilesList()
-                
+
             } catch (e: Exception) {
                 showErrorDialog("Download Failed", getErrorMessage(e))
             }
         }
     }
-    
+
     private suspend fun downloadFileFromUrl(urlString: String): File {
         val url = try {
             URL(urlString)
         } catch (e: MalformedURLException) {
             throw Exception("Invalid URL format")
         }
-        
+
         val connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 60000
         connection.readTimeout = 60000
         connection.requestMethod = "GET"
-        
+
         try {
             connection.connect()
-            
+
             val responseCode = connection.responseCode
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 throw Exception("HTTP error: $responseCode ${connection.responseMessage}")
             }
-            
+
             val contentType = connection.contentType?.lowercase()
             if (contentType != null && !contentType.startsWith("text/")) {
                 throw Exception("File is not a text file (Content-Type: $contentType)")
             }
-            
+
             val downloadsDir = File(filesDir, DOWNLOADS_DIR)
             if (!downloadsDir.exists()) {
                 downloadsDir.mkdirs()
             }
-            
+
             // Delete any existing files in downloads directory
             downloadsDir.listFiles()?.forEach { it.delete() }
-            
+
             val fileName = generateFileName(urlString)
             val file = File(downloadsDir, fileName)
-            
+
             connection.inputStream.use { input ->
                 file.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
-            
+
             return file
-            
+
         } catch (e: SocketTimeoutException) {
             throw Exception("Download timed out after 60 seconds")
         } catch (e: IOException) {
@@ -138,11 +138,11 @@ class MainActivity : AppCompatActivity() {
             connection.disconnect()
         }
     }
-    
+
     private fun generateFileName(urlString: String): String {
         val url = URL(urlString)
         val path = url.path
-        
+
         val fileName = when {
             // If URL ends with slash, use the component before the final slash
             path.endsWith("/") && path.length > 1 -> {
@@ -160,17 +160,17 @@ class MainActivity : AppCompatActivity() {
         }
         return fileName
     }
-    
+
     private fun refreshFilesList() {
         filesContainer.removeAllViews()
-        
+
         val downloadsDir = File(filesDir, DOWNLOADS_DIR)
         val files = if (downloadsDir.exists()) {
             downloadsDir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
         } else {
             emptyList()
         }
-        
+
         if (files.isEmpty()) {
             val textView = TextView(this)
             textView.text = "No files downloaded yet"
@@ -183,52 +183,52 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun createFileView(file: File): LinearLayout {
         val container = LinearLayout(this)
         container.orientation = LinearLayout.HORIZONTAL
         container.setPadding(16, 8, 16, 8)
-        
+
         val textView = TextView(this)
         textView.text = file.name
         textView.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        
+
         val viewButton = Button(this)
         viewButton.text = "View"
         viewButton.setOnClickListener {
             viewFile(file)
         }
-        
+
         val deleteButton = Button(this)
         deleteButton.text = "Delete"
         deleteButton.setOnClickListener {
             deleteFile(file)
         }
-        
+
         container.addView(textView)
         container.addView(viewButton)
         container.addView(deleteButton)
-        
+
         return container
     }
-    
+
     private fun viewFile(file: File) {
         try {
             val content = file.readText()
-            
+
             val dialog = AlertDialog.Builder(this)
                 .setTitle(file.name)
                 .setMessage(content)
                 .setPositiveButton("OK", null)
                 .create()
-            
+
             dialog.show()
-            
+
         } catch (e: Exception) {
             showErrorDialog("Error Reading File", "Could not read file: ${e.message}")
         }
     }
-    
+
     private fun deleteFile(file: File) {
         AlertDialog.Builder(this)
             .setTitle("Delete File")
@@ -244,7 +244,7 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
-    
+
     private fun getErrorMessage(exception: Exception): String {
         return when (exception) {
             is SocketTimeoutException -> "Download timed out. Please check your internet connection and try again."
@@ -252,7 +252,7 @@ class MainActivity : AppCompatActivity() {
             else -> exception.message ?: "An unknown error occurred"
         }
     }
-    
+
     private fun showErrorDialog(title: String, message: String) {
         AlertDialog.Builder(this)
             .setTitle(title)
@@ -260,14 +260,14 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("OK", null)
             .show()
     }
-    
+
     private fun saveUrl(url: String) {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit {
             putString(KEY_LAST_URL, url)
         }
     }
-    
+
     private fun loadSavedUrl() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val savedUrl = prefs.getString(KEY_LAST_URL, "")
@@ -318,3 +318,131 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+
+/* something like
+
+private lateinit var remoteVpn: RemoteVpn
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Initialize RemoteVpn with context
+        remoteVpn = RemoteVpn(this)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Bind to OpenVPN service when activity starts
+        if (!remoteVpn.bindService()) {
+            Toast.makeText(this, "Failed to bind to OpenVPN service", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Unbind when activity stops
+        remoteVpn.unbindService()
+    }
+}
+
+
+
+3. Execute VPN Actions
+
+
+// Start a VPN profile
+val startAction = Action(Command.START, listOf("MyVPNProfile"))
+remoteVpn.act(startAction)
+
+// Stop VPN
+val stopAction = Action(Command.STOP, emptyList())
+remoteVpn.act(stopAction)
+
+// Set default profile
+val setDefaultAction = Action(Command.SET_DEFAULT, listOf("MyVPNProfile"))
+remoteVpn.act(setDefaultAction)
+
+// Set default and start
+val setDefaultAndStartAction = Action(Command.SET_DEFAULT_AND_START, listOf("MyVPNProfile"))
+remoteVpn.act(setDefaultAndStartAction)
+
+
+
+4. Using with ScheduleStore
+
+
+// Load a schedule from CSV
+val csvContent = """
+2024-01-01T08:00:00Z,START,WorkVPN
+2024-01-01T18:00:00Z,STOP
+2024-01-01T20:00:00Z,START,HomeVPN
+"""
+
+val schedule = ScheduleStore.fromCsv(csvContent)
+
+// Get current action and execute it
+val now = Instant.now()
+val currentAction = schedule.getActiveAction(now)
+currentAction?.let { timedAction ->
+    remoteVpn.act(timedAction.action)
+}
+
+
+
+5. Handle Service Connection State
+
+You might want to add a callback mechanism to know when the service is ready:
+
+
+class RemoteVpn(private val context: Context) {
+    var onServiceConnected: (() -> Unit)? = null
+    var onServiceDisconnected: (() -> Unit)? = null
+
+    private val mConnection = object : ServiceConnection {
+        override fun onServiceConnected(className: ComponentName, service: IBinder) {
+            Log.d(TAG, "Service connected")
+            mService = IOpenVPNAPIService.Stub.asInterface(service)
+            onServiceConnected?.invoke()
+        }
+
+        override fun onServiceDisconnected(className: ComponentName) {
+            Log.d(TAG, "Service disconnected")
+            mService = null
+            onServiceDisconnected?.invoke()
+        }
+    }
+}
+
+
+Then use it like:
+
+
+remoteVpn.onServiceConnected = {
+    // Service is ready, can now execute actions
+    val action = Action(Command.START, listOf("MyProfile"))
+    remoteVpn.act(action)
+}
+
+
+
+6. Error Handling
+
+The current implementation logs errors but doesn't propagate them. You might want to add error callbacks:
+
+
+remoteVpn.onError = { error ->
+    Toast.makeText(this, "VPN Error: $error", Toast.LENGTH_LONG).show()
+}
+
+
+
+Prerequisites
+
+ • OpenVPN for Android app must be installed on the device
+ • The user must grant VPN permissions when prompted
+ • Profile names used in actions must exist in OpenVPN for Android
+
+This setup allows your app to programmatically control OpenVPN connections based on schedules or user actions.
+
+*/

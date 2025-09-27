@@ -2,7 +2,7 @@
 android-application = "8.13.0"
 appcompat = "1.7.1"
 guava = "33.5.0-android"
-kotlin-android = "2.2.20"
+kotlin = "2.2.20"
 ktx = "1.17.0"
 
 [libraries]
@@ -12,4 +12,5 @@ guava = { module = "com.google.guava:guava", version.ref = "guava" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-application" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin-android" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }

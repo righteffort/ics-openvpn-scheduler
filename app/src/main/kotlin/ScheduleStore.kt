@@ -2,24 +2,6 @@ package org.righteffort.openvpnscheduler
 
 import java.time.Instant
 
-enum class Command {
-    START,
-    STOP,
-    SET_DEFAULT,
-    SET_DEFAULT_AND_START
-}
-
-// Public API: just the command payload (no timestamp).
-data class Action(
-    val command: Command,
-    val arguments: List<String>
-)
-
-data class TimedAction(
-    val timestamp: Instant,
-    val action: Action
-)
-
 class ScheduleStore private constructor(
     private val actions: List<TimedAction>
 ) {
@@ -57,6 +39,20 @@ class ScheduleStore private constructor(
                 }
                 val command = Command.valueOf(parts[1].uppercase())
                 val args = parts.drop(2)
+                
+                // Validate argument count based on command type
+                when (command) {
+                    Command.START, Command.SET_DEFAULT, Command.SET_DEFAULT_AND_START -> {
+                        require(args.size == 1) { 
+                            "Command $command requires exactly one argument, got ${args.size} in line: $line" 
+                        }
+                    }
+                    Command.STOP -> {
+                        require(args.isEmpty()) { 
+                            "Command $command requires no arguments, got ${args.size} in line: $line" 
+                        }
+                    }
+                }
                 val action = Action(command, args)
                 records.add(TimedAction(ts, action))
                 lastTimestamp = ts
