@@ -2,4 +2,8 @@
 <lint>
     <issue id="SetTextI18n" severity="ignore" />
     <issue id="HardcodedText" severity="ignore" />
+    <issue id="VectorRaster">
+        <ignore path="src/main/res/drawable/adaptive_banner_background.xml" />
+        <ignore path="src/main/res/drawable/adaptive_banner_foreground.xml" />
+    </issue>
 </lint>
