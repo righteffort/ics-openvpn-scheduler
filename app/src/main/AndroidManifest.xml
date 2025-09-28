@@ -13,10 +13,11 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="Text File Downloader"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
-        tools:ignore="MissingTvBanner,MissingApplicationIcon">  <!-- TODO: fix ignores -->
+        tools:ignore="MissingTvBanner">
         <activity android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
