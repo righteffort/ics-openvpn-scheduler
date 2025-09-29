@@ -36,3 +36,6 @@ build
 
 *~
 .aider*
+
+local.properties
+.idea/
