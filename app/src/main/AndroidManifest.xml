@@ -2,7 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	  xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET" />
-
+  <!-- TODO: necessary? -->
+  <uses-permission android:name="de.blinkt.openvpn.api.BIND_SERVICE" />
+  <!-- TODO: does it do anything? -->
+  <uses-permission android:name="android.permission.BIND_VPN_SERVICE " />
     <uses-feature
         android:name="android.software.leanback"
         android:required="false" />
@@ -28,4 +31,7 @@
             </intent-filter>
         </activity>
     </application>
+    <queries>
+        <package android:name="de.blinkt.openvpn"/>
+    </queries>
 </manifest>
