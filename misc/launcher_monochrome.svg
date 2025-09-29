@@ -20,10 +20,10 @@
   <g transform="translate(68, 68) scale(.47)">
     <!-- <circle cx="21.25" cy="21.25" r="23.25" fill="black"/> --> <!-- we fake transparent by building the foot above -->
     <!-- clock rim -->
-    <circle cx="21.25" cy="21.25" r="16" fill="none" stroke="white" stroke-width="4.5"/>
+    <circle cx="21.25" cy="21.25" r="16" fill="none" stroke="black" stroke-width="4.5"/>
     <!-- hour hand -->
-    <line x1="21.25" y1="21.25" x2="21.25" y2="13.5" stroke="white" stroke-width="4" stroke-linecap="round" transform="rotate(155, 21.25, 21.25)"/>
+    <line x1="21.25" y1="21.25" x2="21.25" y2="13.5" stroke="black" stroke-width="4" stroke-linecap="round" transform="rotate(155, 21.25, 21.25)"/>
     <!-- minute hand -->
-    <line x1="21.25" y1="21.25" x2="21.25" y2="12" stroke="white" stroke-width="4" stroke-linecap="round" transform="rotate(60, 21.25, 21.25)"/>
+    <line x1="21.25" y1="21.25" x2="21.25" y2="12" stroke="black" stroke-width="4" stroke-linecap="round" transform="rotate(60, 21.25, 21.25)"/>
   </g>
 </svg>
