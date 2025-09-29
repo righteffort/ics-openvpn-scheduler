@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg>
+  <text x="10" y="20">Some text</text>
+</svg>
+
+<!--
+
+      /* Add other styling */
+      font-size: 24px;
+      font-weight: bold;
+      font-style: italic;
+-->

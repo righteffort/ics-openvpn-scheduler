@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="300dp"
+    android:height="200dp"
+    android:viewportWidth="300"
+    android:viewportHeight="200">
+    
+    <!-- Define clip path for the transparent break -->
+    <clip-path android:pathData="M 0,0 L 300,0 L 300,200 L 0,200 Z M 150,60 A 40,40 0 1,1 150,140 A 40,40 0 1,1 150,60 Z" />
+    
+    <!-- First circle (left) -->
+    <path android:pathData="M 120,40 A 60,60 0 1,1 120,160 A 60,60 0 1,1 120,40 Z"
+        android:fillColor="#ff6b6b" />
+    
+    <!-- Second circle (right) -->
+    <path android:pathData="M 180,40 A 60,60 0 1,1 180,160 A 60,60 0 1,1 180,40 Z"
+        android:fillColor="#4ecdc4" />
+        
+</vector>

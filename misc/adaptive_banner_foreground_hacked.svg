@@ -1,4 +1,5 @@
-<svg width="320" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+<svg width="320px" height="180px" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+ <rect x="0" y="0" width="100%" height="100%" fill="white" />  
   <!-- safe area apparently is >= 267.83 x 65 in a 320 x 180 file ?
        maybe 90% ( 288 x 162) ?
   -->
