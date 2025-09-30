@@ -1,9 +1,11 @@
 package org.righteffort.openvpnscheduler
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -26,18 +28,33 @@ class MainActivity : AppCompatActivity() {
     private lateinit var urlEditText: EditText
     private lateinit var downloadButton: Button
     private lateinit var loadConfigButton: Button
+    private lateinit var stopButton: Button
     private lateinit var filesContainer: LinearLayout
     private var currentSchedule: ScheduleStore? = null
+    private var remoteVpn: RemoteVpn? = null
 
     companion object {
         private const val PREFS_NAME = "TextDownloaderPrefs"
         private const val KEY_LAST_URL = "last_url"
         private const val DOWNLOADS_DIR = "downloads"
         private const val CONFIG_FILE = "schedule_config.csv"
+        private const val TAG = "OpenVPN_Scheduler"
     }
 
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { loadConfigFromUri(it) }
+    }
+
+    private val vpnPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            Log.i(TAG, "VPN permission granted")
+            // Permission granted, enable the stop button
+            stopButton.isEnabled = true
+            Toast.makeText(this, "OpenVPN service ready", Toast.LENGTH_SHORT).show()
+        } else {
+            Log.w(TAG, "VPN permission denied")
+            Toast.makeText(this, "VPN permission required", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,6 +64,7 @@ class MainActivity : AppCompatActivity() {
         urlEditText = findViewById(R.id.urlEditText)
         downloadButton = findViewById(R.id.downloadButton)
         loadConfigButton = findViewById(R.id.loadConfigButton)
+        stopButton = findViewById(R.id.stopButton)
         filesContainer = findViewById(R.id.filesContainer)
 
         downloadButton.setOnClickListener {
@@ -62,9 +80,43 @@ class MainActivity : AppCompatActivity() {
             filePickerLauncher.launch("text/*")
         }
 
+        stopButton.setOnClickListener {
+            val action = Action(Command.STOP, emptyList())
+            remoteVpn?.act(action)
+        }
+
+        // Initially disable the stop button
+        stopButton.isEnabled = false
+
         loadSavedUrl()
         loadSavedConfig()
         refreshFilesList()
+            remoteVpn = RemoteVpn(this, vpnPermissionLauncher)
+            // Set up callback to enable button when service is ready
+        remoteVpn?.onServiceReady = {
+            runOnUiThread {
+                stopButton.isEnabled = true
+                        var msg = "OpenVPN service ready"
+                Log.i(TAG, msg)
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Bind to OpenVPN service when activity starts
+        if (remoteVpn?.bindService() != true) {
+            var msg = "Failed to bind to OpenVPN service"
+            Log.e(TAG, msg)
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Unbind when activity stops
+        remoteVpn?.unbindService()
     }
 
     private fun downloadFile(urlString: String) {
@@ -277,6 +329,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadConfigFromUri(uri: Uri) {
+        Log.d(TAG, "Planning to open " + uri)
         lifecycleScope.launch {
             try {
                 val content = withContext(Dispatchers.IO) {
@@ -301,7 +354,9 @@ class MainActivity : AppCompatActivity() {
             val configFile = File(filesDir, CONFIG_FILE)
             configFile.writeText(schedule.toCsv())
         } catch (e: Exception) {
-            Toast.makeText(this, "Failed to save configuration: ${e.message}", Toast.LENGTH_SHORT).show()
+            var msg = "Failed to save configuration: ${e.message}"
+            Log.e(TAG, msg)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -314,7 +369,9 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Saved configuration loaded", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "Failed to load saved configuration: ${e.message}", Toast.LENGTH_SHORT).show()
+            var msg = "Failed to load saved configuration: ${e.message}"
+            Log.e(TAG, msg)
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
 }
