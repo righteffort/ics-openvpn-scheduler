@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   version="1.1"
+   width="108"
+   height="108"
+   viewBox="0 0 108 108"
+   xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .d {
+        stroke: #1e3863;
+      }
+    </style>
+    <style>
+      .o {
+        stroke: #f08327;
+      }
+    </style>
+  </defs>
+
+
+  <!-- <rect width="981.33331" height="981.33331"/> -->
+  <path transform="scale(.072) translate(259.3,203)"
+	class="o"
+	d="
+	   M 491,142 
+	   A 423,328 0 0 0 787,252 
+	   A 391,600 0 0 1 491,951
+	   A 391,600 0 0 1 192,252
+	   A 423,328 0 0 0 491,142
+	   Z"
+	stroke-width="36"
+	fill="none"/>
+
+  <!-- clock -->
+  <g transform="translate(38.05, 38.05) scale(.75)">
+    <!-- <circle cx="21.25" cy="21.25" r="23.25" fill="black"/> -->
+    <!-- clock rim -->    
+    <circle class="d" cx="21.25" cy="21.25" r="16" fill="none" stroke-width="3"/>
+    <!-- hour hand -->
+    <line class="d" x1="21.25" y1="21.25" x2="21.25" y2="13.5" stroke-width="3" stroke-linecap="round" transform="rotate(155, 21.25, 21.25)"/>
+    <!-- minute hand -->
+    <line class="d" x1="21.25" y1="21.25" x2="21.25" y2="12" stroke-width="3" stroke-linecap="round" transform="rotate(60, 21.25, 21.25)"/>
+
+    <!-- <line x1="21.25" y1="-10" x2="21.25" y2="60" stroke="green" stroke-width="0.2" /> -->
+    <!-- <line x1="2" y1="21.25" x2="40" y2="21.25" stroke="green" stroke-width="0.2" /> -->
+  </g>
+
+  <!-- <circle cx="54" cy="54" r="33" fill="none" stroke="red" stroke-width="0.2"/> -->
+  <!-- <rect x="21" y="21" width="66" height="66" fill="none" stroke="red" stroke-width="0.2"/> -->
+  <!-- <line x1="54" y1="0" x2="54" y2="108" stroke="green" stroke-width="0.2"/> -->
+  <!-- <line x1="0" y1="54" x2="108" y2="54" stroke="green" stroke-width="0.2"/> -->
+  
+  
+</svg>

@@ -1,0 +1,4 @@
+top is 491,144
+bottom is 491,855
+left is 197,256
+right is 786,256
