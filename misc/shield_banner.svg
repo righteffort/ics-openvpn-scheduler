@@ -19,8 +19,7 @@
   <!-- <rect x="16" y="9" width="288" height="162" fill="none" stroke="red" stroke-width="1"/> -->
   <!-- <line y1="90" x2="320" y2="90" stroke="red" stroke-width="1"/> -->
   <g transform="translate(0,33)">
-    <g transform="translate(-22,-22),scale(1.4)">
-      <!-- <rect width="981.33331" height="981.33331"/> -->
+    <g transform="translate(-18,-22),scale(1.4)">
       <path transform="scale(.072) translate(259.3,203)"
 	    class="o"
 	    d="
@@ -52,12 +51,11 @@
       <style>
 	text {
 	font-family: "Inter 24pt";
-	font-size: 40px;
-	font-weight: bold;
+	font-size: 56px;
+	font-weight: 600;
 	}
       </style>
-      <text x="390" y="170" fill="#1A3967" text-anchor="middle">OpenVPN for Android</text>
-      <text x="390" y="220" fill="#1A3967" text-anchor="middle">Scheduler</text>
+      <text x="390" y="199" fill="#1A3967" text-anchor="middle">VPN Scheduler</text>
     </g>
   </g>
 </svg>
