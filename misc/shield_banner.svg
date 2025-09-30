@@ -1,0 +1,63 @@
+<svg width="320" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .d {
+      stroke: #1e3863;
+      }
+    </style>
+    <style>
+      .o {
+      stroke: #f08327;
+      }
+    </style>
+  </defs>
+  
+  <!-- safe area apparently is >= 267.83 x 65 in a 320 x 180 file ?
+       maybe 90% ( 288 x 162) ?
+  -->
+  <!-- <rect width="320" height="180"/> -->
+  <!-- <rect x="16" y="9" width="288" height="162" fill="none" stroke="red" stroke-width="1"/> -->
+  <!-- <line y1="90" x2="320" y2="90" stroke="red" stroke-width="1"/> -->
+  <g transform="translate(0,33)">
+    <g transform="translate(-22,-22),scale(1.4)">
+      <!-- <rect width="981.33331" height="981.33331"/> -->
+      <path transform="scale(.072) translate(259.3,203)"
+	    class="o"
+	    d="
+	       M 491,142 
+	       A 423,328 0 0 0 787,252 
+	       A 391,600 0 0 1 491,951
+	       A 391,600 0 0 1 192,252
+	       A 423,328 0 0 0 491,142
+	       Z"
+	    stroke="#1e3863"
+	    stroke-width="36"
+	    fill="none"/>
+
+      <!-- clock -->
+      <g transform="translate(38.05, 38.05) scale(.75)">
+	<!-- <circle cx="21.25" cy="21.25" r="23.25" fill="black"/> -->
+	<!-- clock rim -->    
+	<circle class="d" cx="21.25" cy="21.25" r="16" fill="none" stroke-width="3"/>
+	<!-- hour hand -->
+	<line class="d" x1="21.25" y1="21.25" x2="21.25" y2="13.5" stroke-width="3" stroke-linecap="round" transform="rotate(155, 21.25, 21.25)"/>
+	<!-- minute hand -->
+	<line class="d" x1="21.25" y1="21.25" x2="21.25" y2="12" stroke-width="3" stroke-linecap="round" transform="rotate(60, 21.25, 21.25)"/>
+
+	<!-- <line x1="21.25" y1="-10" x2="21.25" y2="60" stroke="green" stroke-width="0.2" /> --> 
+	<!-- <line x1="2" y1="21.25" x2="40" y2="21.25" stroke="green" stroke-width="0.2" /> -->
+      </g>
+    </g>
+    <g transform="scale(0.5) translate(7,-68)">
+      <style>
+	text {
+	font-family: "Inter 24pt";
+	font-size: 40px;
+	font-weight: bold;
+	}
+      </style>
+      <text x="390" y="170" fill="#1A3967" text-anchor="middle">OpenVPN for Android</text>
+      <text x="390" y="220" fill="#1A3967" text-anchor="middle">Scheduler</text>
+    </g>
+  </g>
+</svg>
