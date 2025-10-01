@@ -1,13 +1,14 @@
 package org.righteffort.vpnscheduler
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -27,8 +28,6 @@ import java.net.HttpURLConnection
 import java.net.MalformedURLException
 import java.net.SocketTimeoutException
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.*
 import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
@@ -112,7 +111,7 @@ class MainActivity : AppCompatActivity() {
         remoteVpn?.onServiceReady = {
             runOnUiThread {
                 stopButton.isEnabled = true
-                var msg = "OpenVPN service ready"
+                val msg = "OpenVPN service ready"
                 Logger.i(TAG, msg)
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                 schedulePeriodicCheck()
@@ -132,7 +131,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun schedulePeriodicCheck() {
-        val workRequest = PeriodicWorkRequestBuilder<UpdateVpnWorker>(20, TimeUnit.MINUTES)  // TODO
+        // TODO hardcoded short interval
+        val workRequest = PeriodicWorkRequestBuilder<UpdateVpnWorker>(
+            20,
+            TimeUnit.MINUTES
+        )
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -150,7 +153,7 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (remoteVpn?.bindService() != true) {
-            var msg = "Failed to bind to OpenVPN service"
+            val msg = "Failed to bind to OpenVPN service"
             Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
@@ -187,7 +190,7 @@ class MainActivity : AppCompatActivity() {
     private fun downloadFileFromUrl(urlString: String): File {
         val url = try {
             URL(urlString)
-        } catch (e: MalformedURLException) {
+        } catch (_: MalformedURLException) {
             throw Exception("Invalid URL format")
         }
 
@@ -227,7 +230,7 @@ class MainActivity : AppCompatActivity() {
 
             return file
 
-        } catch (e: SocketTimeoutException) {
+        } catch (_: SocketTimeoutException) {
             throw Exception("Download timed out after 60 seconds")
         } catch (e: IOException) {
             throw Exception("Network error: ${e.message}")
@@ -244,12 +247,12 @@ class MainActivity : AppCompatActivity() {
             path.endsWith("/") && path.length > 1 -> {
                 val pathWithoutTrailingSlash = path.dropLast(1)
                 val lastSegment = pathWithoutTrailingSlash.substringAfterLast("/")
-                if (lastSegment.isNotEmpty()) lastSegment else url.host ?: "downloaded_file"
+                lastSegment.ifEmpty { url.host ?: "downloaded_file" }
             }
 
             path.isNotEmpty() && path != "/" -> {
                 val lastSegment = path.substringAfterLast("/")
-                if (lastSegment.isNotEmpty()) lastSegment else "downloaded_file"
+                lastSegment.ifEmpty { "downloaded_file" }
             }
 
             else -> url.host ?: "downloaded_file"
@@ -374,7 +377,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadConfigFromUri(uri: Uri) {
-        Logger.d(TAG, "Planning to open " + uri)
+        Logger.d(TAG, "Planning to open $uri")
         lifecycleScope.launch {
             try {
                 val content = withContext(Dispatchers.IO) {
@@ -406,7 +409,7 @@ class MainActivity : AppCompatActivity() {
             val configFile = File(filesDir, CONFIG_FILE)
             configFile.writeText(schedule.toCsv())
         } catch (e: Exception) {
-            var msg = "Failed to save configuration: ${e.message}"
+            val msg = "Failed to save configuration: ${e.message}"
             Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
@@ -421,7 +424,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Saved configuration loaded", Toast.LENGTH_SHORT).show()
             }
         } catch (e: Exception) {
-            var msg = "Failed to load saved configuration: ${e.message}"
+            val msg = "Failed to load saved configuration: ${e.message}"
             Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
@@ -429,22 +432,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun showLogsDialog() {
         val logs = Logger.getLogs()
-        
+
         // Create a TextView that's focusable and scrollable with D-pad
         val textView = TextView(this).apply {
-            text = if (logs.isEmpty()) "No logs available" else logs
+            text = logs.ifEmpty { "No logs available" }
             typeface = android.graphics.Typeface.MONOSPACE
             textSize = 14f
             setPadding(24, 24, 24, 24)
             setTextIsSelectable(true)
             isFocusable = true
             isFocusableInTouchMode = true
-            
+
             // Enable D-pad scrolling
             movementMethod = android.text.method.ScrollingMovementMethod()
             isVerticalScrollBarEnabled = true
             maxLines = Integer.MAX_VALUE
-            
+
             // Make it easier to see focus on TV
             setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus) {
@@ -454,14 +457,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        
+
         val scrollView = ScrollView(this).apply {
             addView(textView)
             isFocusable = true
             isFocusableInTouchMode = true
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
-        
+
         val dialog = AlertDialog.Builder(this)
             .setTitle("Application Logs (Use D-pad ↑↓ to scroll)")
             .setView(scrollView)
@@ -471,16 +474,16 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Logs cleared", Toast.LENGTH_SHORT).show()
             }
             .create()
-        
+
         dialog.show()
-        
+
         // Make the dialog TV-friendly
         dialog.window?.apply {
             setLayout(
                 (resources.displayMetrics.widthPixels * 0.95).toInt(),
                 (resources.displayMetrics.heightPixels * 0.85).toInt()
             )
-            
+
             // Ensure the text view gets focus for D-pad navigation
             decorView.post {
                 textView.requestFocus()

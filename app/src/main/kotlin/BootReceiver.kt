@@ -3,7 +3,6 @@ package org.righteffort.vpnscheduler
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -24,13 +23,18 @@ class BootReceiver : BroadcastReceiver() {
 
             Logger.i(TAG, "Boot completed - restarting VPN scheduler")
 
-            val workRequest = PeriodicWorkRequestBuilder<UpdateVpnWorker>(20, TimeUnit.MINUTES)  // TODO
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
+            val workRequest =
+                // TODO: hardcoded interval and too short
+                PeriodicWorkRequestBuilder<UpdateVpnWorker>(
+                    20,
+                    TimeUnit.MINUTES
                 )
-                .build()
+                    .setConstraints(
+                        Constraints.Builder()
+                            .setRequiredNetworkType(NetworkType.CONNECTED)
+                            .build()
+                    )
+                    .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 "vpn_schedule_check",

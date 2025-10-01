@@ -13,30 +13,31 @@ class LogBuffer private constructor(private val context: Context) {
     private val buffer = StringBuilder()
     private val lock = ReentrantReadWriteLock()
     private val dateFormat = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault())
-    
+
     companion object {
+        // TODO: fix me `Do not place Android context classes in static fields (static reference to `LogBuffer` which has field `context` pointing to `Context`); this is a memory leak`
         @Volatile
         private var INSTANCE: LogBuffer? = null
         private const val LOG_FILE = "app_logs.txt"
-        
+
         fun getInstance(context: Context): LogBuffer {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: LogBuffer(context.applicationContext).also { INSTANCE = it }
             }
         }
     }
-    
+
     init {
         loadFromFile()
     }
-    
+
     fun log(level: String, tag: String, message: String) {
         val timestamp = dateFormat.format(Date())
         val logEntry = "$timestamp $level/$tag: $message\n"
-        
+
         lock.write {
             buffer.append(logEntry)
-            
+
             // Trim buffer if it exceeds max size
             if (buffer.length > maxSize) {
                 val excess = buffer.length - maxSize
@@ -48,16 +49,18 @@ class LogBuffer private constructor(private val context: Context) {
                 }
             }
         }
-        
+
         saveToFile()
     }
-    
+
+    /*
     fun getLogs(): String {
         return lock.read {
             buffer.toString()
         }
     }
-    
+    */
+
     fun getLogsReversed(): String {
         return lock.read {
             buffer.toString().lines()
@@ -66,25 +69,25 @@ class LogBuffer private constructor(private val context: Context) {
                 .joinToString("\n")
         }
     }
-    
+
     fun clear() {
         lock.write {
             buffer.clear()
         }
         saveToFile()
     }
-    
+
     private fun saveToFile() {
         try {
             val logFile = File(context.filesDir, LOG_FILE)
             lock.read {
                 logFile.writeText(buffer.toString())
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Can't log this error to our own buffer, so just ignore
         }
     }
-    
+
     private fun loadFromFile() {
         try {
             val logFile = File(context.filesDir, LOG_FILE)
@@ -104,7 +107,7 @@ class LogBuffer private constructor(private val context: Context) {
                     }
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Can't log this error, so just start with empty buffer
         }
     }
