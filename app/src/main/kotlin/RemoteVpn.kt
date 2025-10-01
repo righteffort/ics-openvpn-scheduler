@@ -7,21 +7,62 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.RemoteException
-import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
-import de.blinkt.openvpn.api.APIVpnProfile
+import androidx.activity.result.contract.ActivityResultContracts
 import de.blinkt.openvpn.api.IOpenVPNAPIService
+import de.blinkt.openvpn.api.IOpenVPNStatusCallback
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+interface PermissionHandler {
+    fun registerForActivityResult(
+        contract: ActivityResultContracts.StartActivityForResult,
+        callback: (androidx.activity.result.ActivityResult) -> Unit
+    ): ActivityResultLauncher<Intent>
+}
 
 class RemoteVpn(
     private val context: Context,
-    private val permissionLauncher: ActivityResultLauncher<Intent>
+    permissionHandler: PermissionHandler
 ) {
     private var mService: IOpenVPNAPIService? = null
     private var isBound = false
     var onServiceReady: (() -> Unit)? = null
 
-    companion object {
+    // Pending action to execute after permission is granted
+    private var pendingAction: (suspend () -> Unit)? = null
+
+    private var permissionLauncher: ActivityResultLauncher<Intent>
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    @Suppress("unused")
+    private companion object {
         private const val TAG = "VPNSchedulerRemoteVpn"
+    }
+
+    init {
+        // Register permission launcher during initialization
+        permissionLauncher = permissionHandler.registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                onPermissionGranted()
+            } else {
+                onPermissionDenied()
+            }
+        }
+    }
+
+    private val statusCallback = object : IOpenVPNStatusCallback.Stub() {
+        override fun newStatus(uuid: String?, state: String?, message: String?, level: String?) {
+            Logger.i(
+                TAG,
+                "VPN Status - UUID=$uuid, State=$state, Message=$message, Level=$level"
+            )
+        }
     }
 
     private val mConnection = object : ServiceConnection {
@@ -29,24 +70,25 @@ class RemoteVpn(
             Logger.i(TAG, "Service connected")
             mService = IOpenVPNAPIService.Stub.asInterface(service)
 
-            try {
-                // Request permission to use the API
-                val permissionIntent = mService?.prepare(context.packageName)
-                if (permissionIntent != null) {
-                    Logger.i(TAG, "Permission required, starting permission request")
-                    permissionLauncher.launch(permissionIntent)
-                } else {
-                    Logger.i(TAG, "Permission already granted")
+            // Register status callback and notify service ready on background thread
+            serviceScope.launch {
+                executeWithPermission {
+                    registerStatusCallbackSafely()
+                }
+                // Call onServiceReady on main thread after permission handling
+                withContext(Dispatchers.Main) {
                     onServiceReady?.invoke()
                 }
-            } catch (e: Exception) {
-                Logger.e(TAG, "Error requesting permission", e)
-                onServiceReady?.invoke()
             }
         }
 
         override fun onServiceDisconnected(className: ComponentName) {
             Logger.i(TAG, "Service disconnected")
+            try {
+                mService?.unregisterStatusCallback(statusCallback)
+            } catch (e: Exception) {
+                Logger.e(TAG, "Error unregistering callback", e)
+            }
             mService = null
         }
     }
@@ -79,6 +121,15 @@ class RemoteVpn(
      */
     fun unbindService() {
         if (isBound) {
+            // Unregister callback on background thread to avoid StrictMode violations
+            serviceScope.launch {
+                try {
+                    mService?.unregisterStatusCallback(statusCallback)
+                    Logger.i(TAG, "Status callback unregistered")
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Error unregistering callback during unbind", e)
+                }
+            }
             context.unbindService(mConnection)
             isBound = false
             mService = null
@@ -86,10 +137,9 @@ class RemoteVpn(
     }
 
     /**
-     * Execute a VPN action
+     * Execute an action with permission handling
      */
-    fun act(action: Action) {
-        Logger.d(TAG, action.toString())
+    private suspend fun executeWithPermission(action: suspend () -> Unit) {
         val service = mService
         if (service == null) {
             Logger.e(TAG, "Service not connected")
@@ -97,49 +147,116 @@ class RemoteVpn(
         }
 
         try {
-            // TODO we don't need to do both of these, probably
-            // TODO it would be better to arrange to execute the operation once
-            // permission is granted
             // Check if we have permission to use the API
             val permissionIntent = service.prepare(context.packageName)
-            if (permissionIntent != null) {
-                Logger.e(TAG, "Permission required - need to request VPN API permission")
-                permissionLauncher.launch(permissionIntent)
-                return
-            }
+            if (permissionIntent == null) {
+                // Already have permission, execute immediately
+                Logger.d(TAG, "Already have permission")
+                action()
+            } else {
+                // Need permission, stash action and request it
+                Logger.i(TAG, "Permission required, storing action and requesting permission")
+                pendingAction = action
 
-            // Also check VPN service permission
-            val vpnPermissionIntent = service.prepareVPNService()
-            if (vpnPermissionIntent != null) {
-                Logger.e(TAG, "VPN permission required")
-                permissionLauncher.launch(vpnPermissionIntent)
-                return
-            }
-
-            // Now execute the actual command
-            when (action.command) {
-                Command.START -> {
-                    val uuid = getUUID(action.arguments[0])
-                    start(uuid)
-                }
-
-                Command.STOP -> {
-                    stop()
-                }
-
-                Command.SET_DEFAULT -> {
-                    val uuid = getUUID(action.arguments[0])
-                    setDefault(uuid)
-                }
-
-                Command.SET_DEFAULT_AND_START -> {
-                    val uuid = getUUID(action.arguments[0])
-                    setDefault(uuid)
-                    start(uuid)
+                withContext(Dispatchers.Main) {
+                    permissionLauncher.launch(permissionIntent)
                 }
             }
         } catch (e: Exception) {
-            Logger.e(TAG, "Error executing action: ${action.command}", e)
+            Logger.e(TAG, "Error checking permissions", e)
+        }
+    }
+
+    /**
+     * Call this when permission is granted (from MainActivity's permission result handler)
+     */
+    fun onPermissionGranted() {
+        Logger.i(TAG, "Permission granted")
+        val action = pendingAction
+        pendingAction = null
+
+        if (action != null) {
+            serviceScope.launch {
+                try {
+                    action()
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Error executing pending action", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * Call this when permission is denied
+     */
+    fun onPermissionDenied() {
+        Logger.w(TAG, "Permission denied")
+        pendingAction = null
+    }
+
+    /**
+     * Execute a VPN action
+     */
+    fun act(action: Action) {
+        Logger.d(TAG, action.toString())
+
+        serviceScope.launch {
+            executeWithPermission {
+                try {
+                    // Check VPN service permission
+                    val vpnPermissionIntent = mService?.prepareVPNService()
+                    if (vpnPermissionIntent != null) {
+                        Logger.e(TAG, "VPN permission required")
+                        pendingAction = {
+                            executeVpnCommand(action)
+                        }
+
+                        // Launch permission request on main thread
+                        withContext(Dispatchers.Main) {
+                            permissionLauncher.launch(vpnPermissionIntent)
+                        }
+                        return@executeWithPermission
+                    }
+
+                    // Execute the actual command
+                    executeVpnCommand(action)
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Error executing action: ${action.command}", e)
+                }
+            }
+        }
+    }
+
+    private suspend fun executeVpnCommand(action: Action) {
+        when (action.command) {
+            Command.START -> {
+                val uuid = getUUID(action.arguments[0])
+                start(uuid)
+            }
+
+            Command.STOP -> {
+                stop()
+            }
+
+            Command.SET_DEFAULT -> {
+                val uuid = getUUID(action.arguments[0])
+                setDefault(uuid)
+            }
+
+            Command.SET_DEFAULT_AND_START -> {
+                val uuid = getUUID(action.arguments[0])
+                setDefault(uuid)
+                start(uuid)
+            }
+        }
+    }
+
+    private fun registerStatusCallbackSafely() {
+        try {
+            mService?.registerStatusCallback(statusCallback)
+            Logger.i(TAG, "Status callback registered")
+        } catch (e: Exception) {
+            Logger.e(TAG, "Error registering status callback", e)
         }
     }
 
@@ -170,14 +287,14 @@ class RemoteVpn(
         }
     }
 
-    private fun getUUID(profileName: String): String {
+    private suspend fun getUUID(profileName: String): String = withContext(Dispatchers.IO) {
         val service = mService ?: throw IllegalStateException("Service not connected")
 
         try {
             val profiles = service.profiles
             for (profile in profiles) {
                 if (profile.mName == profileName) {
-                    return profile.mUUID
+                    return@withContext profile.mUUID
                 }
             }
             throw IllegalArgumentException("Profile not found: $profileName")

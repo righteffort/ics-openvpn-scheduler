@@ -1,6 +1,10 @@
 package org.righteffort.vpnscheduler
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -8,14 +12,15 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
-class LogBuffer private constructor(private val context: Context) {
+class LogBuffer private constructor(context: Context) {
+    private val appContext = context.applicationContext
     private val maxSize = 65536
     private val buffer = StringBuilder()
     private val lock = ReentrantReadWriteLock()
     private val dateFormat = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault())
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     companion object {
-        // TODO: fix me `Do not place Android context classes in static fields (static reference to `LogBuffer` which has field `context` pointing to `Context`); this is a memory leak`
         @Volatile
         private var INSTANCE: LogBuffer? = null
         private const val LOG_FILE = "app_logs.txt"
@@ -33,7 +38,7 @@ class LogBuffer private constructor(private val context: Context) {
 
     fun log(level: String, tag: String, message: String) {
         val timestamp = dateFormat.format(Date())
-        val logEntry = "$timestamp $level/$tag: $message\n"
+        val logEntry = "$timestamp $level $tag: $message\n"
 
         lock.write {
             buffer.append(logEntry)
@@ -78,37 +83,40 @@ class LogBuffer private constructor(private val context: Context) {
     }
 
     private fun saveToFile() {
-        try {
-            val logFile = File(context.filesDir, LOG_FILE)
-            lock.read {
-                logFile.writeText(buffer.toString())
+        ioScope.launch {
+            try {
+                val logFile = File(appContext.filesDir, LOG_FILE)
+                val content = lock.read { buffer.toString() }
+                logFile.writeText(content)
+            } catch (_: Exception) {
+                // Can't log this error to our own buffer, so just ignore
             }
-        } catch (_: Exception) {
-            // Can't log this error to our own buffer, so just ignore
         }
     }
 
     private fun loadFromFile() {
-        try {
-            val logFile = File(context.filesDir, LOG_FILE)
-            if (logFile.exists()) {
-                val content = logFile.readText()
-                lock.write {
-                    buffer.append(content)
-                    // Ensure we don't exceed max size on load
-                    if (buffer.length > maxSize) {
-                        val excess = buffer.length - maxSize
-                        val newlineIndex = buffer.indexOf('\n', excess)
-                        if (newlineIndex != -1) {
-                            buffer.delete(0, newlineIndex + 1)
-                        } else {
-                            buffer.delete(0, excess)
+        ioScope.launch {
+            try {
+                val logFile = File(appContext.filesDir, LOG_FILE)
+                if (logFile.exists()) {
+                    val content = logFile.readText()
+                    lock.write {
+                        buffer.append(content)
+                        // Ensure we don't exceed max size on load
+                        if (buffer.length > maxSize) {
+                            val excess = buffer.length - maxSize
+                            val newlineIndex = buffer.indexOf('\n', excess)
+                            if (newlineIndex != -1) {
+                                buffer.delete(0, newlineIndex + 1)
+                            } else {
+                                buffer.delete(0, excess)
+                            }
                         }
                     }
                 }
+            } catch (_: Exception) {
+                // Can't log this error, so just start with empty buffer
             }
-        } catch (_: Exception) {
-            // Can't log this error, so just start with empty buffer
         }
     }
 }

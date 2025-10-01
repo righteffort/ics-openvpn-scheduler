@@ -1,5 +1,6 @@
 package org.righteffort.vpnscheduler
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup
@@ -9,6 +10,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -30,7 +32,7 @@ import java.net.SocketTimeoutException
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), PermissionHandler {
     private lateinit var urlEditText: EditText
     private lateinit var downloadButton: Button
     private lateinit var loadConfigButton: Button
@@ -38,7 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var showLogsButton: Button
     private lateinit var filesContainer: LinearLayout
     private var currentSchedule: ScheduleStore? = null
-    private var remoteVpn: RemoteVpn? = null
+    private lateinit var remoteVpn: RemoteVpn
 
     companion object {
         private const val PREFS_NAME = "TextDownloaderPrefs"
@@ -48,23 +50,18 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "VPNScheduler"
     }
 
+    override fun registerForActivityResult(
+        contract: ActivityResultContracts.StartActivityForResult,
+        callback: (androidx.activity.result.ActivityResult) -> Unit
+    ): ActivityResultLauncher<Intent> {
+        return super.registerForActivityResult(contract, callback)
+    }
+
     private val filePickerLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             uri?.let { loadConfigFromUri(it) }
         }
 
-    private val vpnPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == RESULT_OK) {
-                Logger.i(TAG, "VPN permission granted")
-                // Permission granted, enable the stop button
-                stopButton.isEnabled = true
-                Toast.makeText(this, "OpenVPN service ready", Toast.LENGTH_SHORT).show()
-            } else {
-                Logger.w(TAG, "VPN permission denied")
-                Toast.makeText(this, "VPN permission required", Toast.LENGTH_LONG).show()
-            }
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,7 +90,7 @@ class MainActivity : AppCompatActivity() {
 
         stopButton.setOnClickListener {
             val action = Action(Command.STOP, emptyList())
-            remoteVpn?.act(action)
+            remoteVpn.act(action)
         }
 
         showLogsButton.setOnClickListener {
@@ -106,9 +103,10 @@ class MainActivity : AppCompatActivity() {
         loadSavedUrl()
         loadSavedConfig()
         refreshFilesList()
-        remoteVpn = RemoteVpn(this, vpnPermissionLauncher)
+        remoteVpn = RemoteVpn(this, this)
+
         // Set up callback to enable button when service is ready
-        remoteVpn?.onServiceReady = {
+        remoteVpn.onServiceReady = {
             runOnUiThread {
                 stopButton.isEnabled = true
                 val msg = "OpenVPN service ready"
@@ -152,7 +150,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (remoteVpn?.bindService() != true) {
+        if (!remoteVpn.bindService()) {
             val msg = "Failed to bind to OpenVPN service"
             Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
@@ -161,7 +159,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        remoteVpn?.unbindService()
+        remoteVpn.unbindService()
     }
 
     private fun downloadFile(urlString: String) {
@@ -261,24 +259,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshFilesList() {
-        filesContainer.removeAllViews()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val downloadsDir = File(filesDir, DOWNLOADS_DIR)
+            val files = if (downloadsDir.exists()) {
+                downloadsDir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
+            } else {
+                emptyList()
+            }
 
-        val downloadsDir = File(filesDir, DOWNLOADS_DIR)
-        val files = if (downloadsDir.exists()) {
-            downloadsDir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
-        } else {
-            emptyList()
-        }
+            withContext(Dispatchers.Main) {
+                filesContainer.removeAllViews()
 
-        if (files.isEmpty()) {
-            val textView = TextView(this)
-            textView.text = "No files downloaded yet"
-            textView.setPadding(16, 16, 16, 16)
-            filesContainer.addView(textView)
-        } else {
-            files.forEach { file ->
-                val fileView = createFileView(file)
-                filesContainer.addView(fileView)
+                if (files.isEmpty()) {
+                    val textView = TextView(this@MainActivity)
+                    textView.text = "No files downloaded yet"
+                    textView.setPadding(16, 16, 16, 16)
+                    filesContainer.addView(textView)
+                } else {
+                    files.forEach { file ->
+                        val fileView = createFileView(file)
+                        filesContainer.addView(fileView)
+                    }
+                }
             }
         }
     }
@@ -313,19 +315,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun viewFile(file: File) {
-        try {
-            val content = file.readText()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val content = file.readText()
 
-            val dialog = AlertDialog.Builder(this)
-                .setTitle(file.name)
-                .setMessage(content)
-                .setPositiveButton("OK", null)
-                .create()
+                withContext(Dispatchers.Main) {
+                    val dialog = AlertDialog.Builder(this@MainActivity)
+                        .setTitle(file.name)
+                        .setMessage(content)
+                        .setPositiveButton("OK", null)
+                        .create()
 
-            dialog.show()
+                    dialog.show()
+                }
 
-        } catch (e: Exception) {
-            showErrorDialog("Error Reading File", "Could not read file: ${e.message}")
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    showErrorDialog("Error Reading File", "Could not read file: ${e.message}")
+                }
+            }
         }
     }
 
@@ -334,11 +342,21 @@ class MainActivity : AppCompatActivity() {
             .setTitle("Delete File")
             .setMessage("Are you sure you want to delete ${file.name}?")
             .setPositiveButton("Delete") { _, _ ->
-                if (file.delete()) {
-                    Toast.makeText(this, "File deleted", Toast.LENGTH_SHORT).show()
-                    refreshFilesList()
-                } else {
-                    Toast.makeText(this, "Failed to delete file", Toast.LENGTH_SHORT).show()
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val success = file.delete()
+                    withContext(Dispatchers.Main) {
+                        if (success) {
+                            Toast.makeText(this@MainActivity, "File deleted", Toast.LENGTH_SHORT)
+                                .show()
+                            refreshFilesList()
+                        } else {
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Failed to delete file",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -362,17 +380,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveUrl(url: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        prefs.edit {
-            putString(KEY_LAST_URL, url)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            prefs.edit {
+                putString(KEY_LAST_URL, url)
+            }
         }
     }
 
     private fun loadSavedUrl() {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val savedUrl = prefs.getString(KEY_LAST_URL, "")
-        if (!savedUrl.isNullOrEmpty()) {
-            urlEditText.setText(savedUrl)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            val savedUrl = prefs.getString(KEY_LAST_URL, "")
+            if (!savedUrl.isNullOrEmpty()) {
+                withContext(Dispatchers.Main) {
+                    urlEditText.setText(savedUrl)
+                }
+            }
         }
     }
 
@@ -405,28 +429,43 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveConfig(schedule: ScheduleStore) {
-        try {
-            val configFile = File(filesDir, CONFIG_FILE)
-            configFile.writeText(schedule.toCsv())
-        } catch (e: Exception) {
-            val msg = "Failed to save configuration: ${e.message}"
-            Logger.e(TAG, msg)
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val configFile = File(filesDir, CONFIG_FILE)
+                configFile.writeText(schedule.toCsv())
+            } catch (e: Exception) {
+                val msg = "Failed to save configuration: ${e.message}"
+                Logger.e(TAG, msg)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
     private fun loadSavedConfig() {
-        try {
-            val configFile = File(filesDir, CONFIG_FILE)
-            if (configFile.exists()) {
-                val content = configFile.readText()
-                currentSchedule = ScheduleStore.fromCsv(content)
-                Toast.makeText(this, "Saved configuration loaded", Toast.LENGTH_SHORT).show()
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val configFile = File(filesDir, CONFIG_FILE)
+                if (configFile.exists()) {
+                    val content = configFile.readText()
+                    val schedule = ScheduleStore.fromCsv(content)
+                    withContext(Dispatchers.Main) {
+                        currentSchedule = schedule
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Saved configuration loaded",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                val msg = "Failed to load saved configuration: ${e.message}"
+                Logger.e(TAG, msg)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
+                }
             }
-        } catch (e: Exception) {
-            val msg = "Failed to load saved configuration: ${e.message}"
-            Logger.e(TAG, msg)
-            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
