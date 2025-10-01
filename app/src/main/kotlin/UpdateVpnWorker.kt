@@ -1,28 +1,8 @@
 package org.righteffort.vpnscheduler
 
-import android.app.Activity
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.os.Bundle
-import android.util.Log
-import android.widget.Button
-import android.widget.TextView
-import android.widget.Toast
-import androidx.work.Constraints
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ListenableWorker
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
-import java.net.URL
-import java.text.SimpleDateFormat
-import java.time.LocalDateTime
-import java.util.concurrent.TimeUnit
-import org.json.JSONArray
 
 class UpdateVpnWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 

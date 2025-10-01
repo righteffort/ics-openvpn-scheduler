@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 class BootReceiver : BroadcastReceiver() {
+
     companion object {
         private const val TAG = "VPNSchedulerBootReceiver"
     }

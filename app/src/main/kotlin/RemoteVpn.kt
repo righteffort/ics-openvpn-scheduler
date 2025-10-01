@@ -38,7 +38,6 @@ class RemoteVpn(
     private var permissionLauncher: ActivityResultLauncher<Intent>
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    @Suppress("unused")
     private companion object {
         private const val TAG = "VPNSchedulerRemoteVpn"
     }
