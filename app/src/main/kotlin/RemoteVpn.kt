@@ -1,4 +1,4 @@
-package org.righteffort.openvpnscheduler
+package org.righteffort.vpnscheduler
 
 import android.app.Activity
 import android.content.ComponentName
@@ -12,38 +12,41 @@ import androidx.activity.result.ActivityResultLauncher
 import de.blinkt.openvpn.api.APIVpnProfile
 import de.blinkt.openvpn.api.IOpenVPNAPIService
 
-class RemoteVpn(private val context: Context, private val permissionLauncher: ActivityResultLauncher<Intent>) {
+class RemoteVpn(
+    private val context: Context,
+    private val permissionLauncher: ActivityResultLauncher<Intent>
+) {
     private var mService: IOpenVPNAPIService? = null
     private var isBound = false
     var onServiceReady: (() -> Unit)? = null
 
     companion object {
-        private const val TAG = "OpenVPN_Scheduler_RemoteVpn"
+        private const val TAG = "VPNSchedulerRemoteVpn"
     }
 
     private val mConnection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            Log.i(TAG, "Service connected")
+            Logger.i(TAG, "Service connected")
             mService = IOpenVPNAPIService.Stub.asInterface(service)
 
             try {
                 // Request permission to use the API
                 val permissionIntent = mService?.prepare(context.packageName)
                 if (permissionIntent != null) {
-                    Log.i(TAG, "Permission required, starting permission request")
+                    Logger.i(TAG, "Permission required, starting permission request")
                     permissionLauncher.launch(permissionIntent)
                 } else {
-                    Log.i(TAG, "Permission already granted")
+                    Logger.i(TAG, "Permission already granted")
                     onServiceReady?.invoke()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error requesting permission", e)
+                Logger.e(TAG, "Error requesting permission", e)
                 onServiceReady?.invoke()
             }
         }
 
         override fun onServiceDisconnected(className: ComponentName) {
-            Log.i(TAG, "Service disconnected")
+            Logger.i(TAG, "Service disconnected")
             mService = null
         }
     }
@@ -54,16 +57,16 @@ class RemoteVpn(private val context: Context, private val permissionLauncher: Ac
     fun bindService(): Boolean {
         if (isBound) return true
 
-        Log.d(TAG, "service class name: ${IOpenVPNAPIService::class.java.name}")
+        Logger.d(TAG, "service class name: ${IOpenVPNAPIService::class.java.name}")
         val intent = Intent(IOpenVPNAPIService::class.java.name).apply {
             setPackage("de.blinkt.openvpn")
         }
-        Log.d(TAG, "Intent action: ${intent.action}")
+        Logger.d(TAG, "Intent action: ${intent.action}")
         isBound = context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE)
         /* this approach doesn't suffice
         if (isBound) {
            if (mService?.prepareVPNService() != null) {
-                Log.e(TAG, "Permission to control service missing")
+                Logger.e(TAG, "Permission to control service missing")
                  unbindService()
                  }
         }
@@ -83,20 +86,13 @@ class RemoteVpn(private val context: Context, private val permissionLauncher: Ac
     }
 
     /**
-     * Check if the service is ready to use
-     */
-    fun isServiceReady(): Boolean {
-        return mService != null
-    }
-
-    /**
      * Execute a VPN action
      */
     fun act(action: Action) {
-        Log.d(TAG, action.toString())
+        Logger.d(TAG, action.toString())
         val service = mService
         if (service == null) {
-            Log.e(TAG, "Service not connected")
+            Logger.e(TAG, "Service not connected")
             return
         }
 
@@ -107,7 +103,7 @@ class RemoteVpn(private val context: Context, private val permissionLauncher: Ac
             // Check if we have permission to use the API
             val permissionIntent = service.prepare(context.packageName)
             if (permissionIntent != null) {
-                Log.e(TAG, "Permission required - need to request VPN API permission")
+                Logger.e(TAG, "Permission required - need to request VPN API permission")
                 permissionLauncher.launch(permissionIntent)
                 return
             }
@@ -115,7 +111,7 @@ class RemoteVpn(private val context: Context, private val permissionLauncher: Ac
             // Also check VPN service permission
             val vpnPermissionIntent = service.prepareVPNService()
             if (vpnPermissionIntent != null) {
-                Log.e(TAG, "VPN permission required")
+                Logger.e(TAG, "VPN permission required")
                 permissionLauncher.launch(vpnPermissionIntent)
                 return
             }
@@ -126,13 +122,16 @@ class RemoteVpn(private val context: Context, private val permissionLauncher: Ac
                     val uuid = getUUID(action.arguments[0])
                     start(uuid)
                 }
+
                 Command.STOP -> {
                     stop()
                 }
+
                 Command.SET_DEFAULT -> {
                     val uuid = getUUID(action.arguments[0])
                     setDefault(uuid)
                 }
+
                 Command.SET_DEFAULT_AND_START -> {
                     val uuid = getUUID(action.arguments[0])
                     setDefault(uuid)
@@ -140,34 +139,34 @@ class RemoteVpn(private val context: Context, private val permissionLauncher: Ac
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error executing action: ${action.command}", e)
+            Logger.e(TAG, "Error executing action: ${action.command}", e)
         }
     }
 
     private fun start(uuid: String) {
         try {
             mService?.startProfile(uuid)
-            Log.d(TAG, "Started profile: $uuid")
+            Logger.d(TAG, "Started profile: $uuid")
         } catch (e: RemoteException) {
-            Log.e(TAG, "Failed to start profile: $uuid", e)
+            Logger.e(TAG, "Failed to start profile: $uuid", e)
         }
     }
 
     private fun stop() {
         try {
             mService?.disconnect()
-            Log.d(TAG, "Disconnected VPN")
+            Logger.d(TAG, "Disconnected VPN")
         } catch (e: RemoteException) {
-            Log.e(TAG, "Failed to disconnect VPN", e)
+            Logger.e(TAG, "Failed to disconnect VPN", e)
         }
     }
 
     private fun setDefault(uuid: String) {
         try {
             mService?.setDefaultProfile(uuid)
-            Log.d(TAG, "Set default profile: $uuid")
+            Logger.d(TAG, "Set default profile: $uuid")
         } catch (e: RemoteException) {
-            Log.e(TAG, "Failed to set default profile: $uuid", e)
+            Logger.e(TAG, "Failed to set default profile: $uuid", e)
         }
     }
 

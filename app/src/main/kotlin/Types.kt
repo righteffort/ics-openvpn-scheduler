@@ -1,4 +1,4 @@
-package org.righteffort.openvpnscheduler
+package org.righteffort.vpnscheduler
 
 import java.time.Instant
 

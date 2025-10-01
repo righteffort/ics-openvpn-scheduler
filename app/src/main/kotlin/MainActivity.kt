@@ -1,4 +1,4 @@
-package org.righteffort.openvpnscheduler
+package org.righteffort.vpnscheduler
 
 import android.app.Activity
 import android.content.Context
@@ -6,12 +6,18 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.lifecycle.lifecycleScope
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -23,12 +29,14 @@ import java.net.SocketTimeoutException
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
     private lateinit var urlEditText: EditText
     private lateinit var downloadButton: Button
     private lateinit var loadConfigButton: Button
     private lateinit var stopButton: Button
+    private lateinit var showLogsButton: Button
     private lateinit var filesContainer: LinearLayout
     private var currentSchedule: ScheduleStore? = null
     private var remoteVpn: RemoteVpn? = null
@@ -38,33 +46,37 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_LAST_URL = "last_url"
         private const val DOWNLOADS_DIR = "downloads"
         private const val CONFIG_FILE = "schedule_config.csv"
-        private const val TAG = "OpenVPN_Scheduler"
+        private const val TAG = "VPNScheduler"
     }
 
-    private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { loadConfigFromUri(it) }
-    }
-
-    private val vpnPermissionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            Log.i(TAG, "VPN permission granted")
-            // Permission granted, enable the stop button
-            stopButton.isEnabled = true
-            Toast.makeText(this, "OpenVPN service ready", Toast.LENGTH_SHORT).show()
-        } else {
-            Log.w(TAG, "VPN permission denied")
-            Toast.makeText(this, "VPN permission required", Toast.LENGTH_LONG).show()
+    private val filePickerLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            uri?.let { loadConfigFromUri(it) }
         }
-    }
+
+    private val vpnPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                Logger.i(TAG, "VPN permission granted")
+                // Permission granted, enable the stop button
+                stopButton.isEnabled = true
+                Toast.makeText(this, "OpenVPN service ready", Toast.LENGTH_SHORT).show()
+            } else {
+                Logger.w(TAG, "VPN permission denied")
+                Toast.makeText(this, "VPN permission required", Toast.LENGTH_LONG).show()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Logger.init(this)
         setContentView(R.layout.activity_main)
 
         urlEditText = findViewById(R.id.urlEditText)
         downloadButton = findViewById(R.id.downloadButton)
         loadConfigButton = findViewById(R.id.loadConfigButton)
         stopButton = findViewById(R.id.stopButton)
+        showLogsButton = findViewById(R.id.showLogsButton)
         filesContainer = findViewById(R.id.filesContainer)
 
         downloadButton.setOnClickListener {
@@ -85,37 +97,67 @@ class MainActivity : AppCompatActivity() {
             remoteVpn?.act(action)
         }
 
+        showLogsButton.setOnClickListener {
+            showLogsDialog()
+        }
+
         // Initially disable the stop button
         stopButton.isEnabled = false
 
         loadSavedUrl()
         loadSavedConfig()
         refreshFilesList()
-            remoteVpn = RemoteVpn(this, vpnPermissionLauncher)
-            // Set up callback to enable button when service is ready
+        remoteVpn = RemoteVpn(this, vpnPermissionLauncher)
+        // Set up callback to enable button when service is ready
         remoteVpn?.onServiceReady = {
             runOnUiThread {
                 stopButton.isEnabled = true
-                        var msg = "OpenVPN service ready"
-                Log.i(TAG, msg)
+                var msg = "OpenVPN service ready"
+                Logger.i(TAG, msg)
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                schedulePeriodicCheck()
+                // TODO also check right now.
             }
         }
+        WorkManager.getInstance(this)
+            .getWorkInfosForUniqueWorkLiveData("vpn_schedule_check")
+            .observe(this) { workInfos ->
+                workInfos?.forEach { workInfo ->
+                    Logger.d(TAG, "Work status: ${workInfo.state}, tags: ${workInfo.tags}")
+                    if (workInfo.state.isFinished) {
+                        Logger.d(TAG, "Work finished with result: ${workInfo.outputData}")
+                    }
+                }
+            }
+    }
+
+    private fun schedulePeriodicCheck() {
+        val workRequest = PeriodicWorkRequestBuilder<UpdateVpnWorker>(20, TimeUnit.MINUTES)  // TODO
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "vpn_schedule_check",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            workRequest
+        )
     }
 
     override fun onStart() {
         super.onStart()
-        // Bind to OpenVPN service when activity starts
         if (remoteVpn?.bindService() != true) {
             var msg = "Failed to bind to OpenVPN service"
-            Log.e(TAG, msg)
+            Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
     }
 
     override fun onStop() {
         super.onStop()
-        // Unbind when activity stops
         remoteVpn?.unbindService()
     }
 
@@ -129,7 +171,11 @@ class MainActivity : AppCompatActivity() {
                     downloadFileFromUrl(urlString)
                 }
 
-                Toast.makeText(this@MainActivity, "Download completed: ${result.name}", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    "Download completed: ${result.name}",
+                    Toast.LENGTH_LONG
+                ).show()
                 refreshFilesList()
 
             } catch (e: Exception) {
@@ -138,7 +184,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun downloadFileFromUrl(urlString: String): File {
+    private fun downloadFileFromUrl(urlString: String): File {
         val url = try {
             URL(urlString)
         } catch (e: MalformedURLException) {
@@ -168,7 +214,6 @@ class MainActivity : AppCompatActivity() {
                 downloadsDir.mkdirs()
             }
 
-            // Delete any existing files in downloads directory
             downloadsDir.listFiles()?.forEach { it.delete() }
 
             val fileName = generateFileName(urlString)
@@ -196,18 +241,17 @@ class MainActivity : AppCompatActivity() {
         val path = url.path
 
         val fileName = when {
-            // If URL ends with slash, use the component before the final slash
             path.endsWith("/") && path.length > 1 -> {
                 val pathWithoutTrailingSlash = path.dropLast(1)
                 val lastSegment = pathWithoutTrailingSlash.substringAfterLast("/")
                 if (lastSegment.isNotEmpty()) lastSegment else url.host ?: "downloaded_file"
             }
-            // If path is not empty and doesn't end with slash
+
             path.isNotEmpty() && path != "/" -> {
                 val lastSegment = path.substringAfterLast("/")
                 if (lastSegment.isNotEmpty()) lastSegment else "downloaded_file"
             }
-            // Default case
+
             else -> url.host ?: "downloaded_file"
         }
         return fileName
@@ -243,7 +287,8 @@ class MainActivity : AppCompatActivity() {
 
         val textView = TextView(this)
         textView.text = file.name
-        textView.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        textView.layoutParams =
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
 
         val viewButton = Button(this)
         viewButton.text = "View"
@@ -314,14 +359,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveUrl(url: String) {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         prefs.edit {
             putString(KEY_LAST_URL, url)
         }
     }
 
     private fun loadSavedUrl() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val savedUrl = prefs.getString(KEY_LAST_URL, "")
         if (!savedUrl.isNullOrEmpty()) {
             urlEditText.setText(savedUrl)
@@ -329,7 +374,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadConfigFromUri(uri: Uri) {
-        Log.d(TAG, "Planning to open " + uri)
+        Logger.d(TAG, "Planning to open " + uri)
         lifecycleScope.launch {
             try {
                 val content = withContext(Dispatchers.IO) {
@@ -341,10 +386,17 @@ class MainActivity : AppCompatActivity() {
                 val schedule = ScheduleStore.fromCsv(content)
                 currentSchedule = schedule
                 saveConfig(schedule)
-                Toast.makeText(this@MainActivity, "Configuration loaded successfully", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    "Configuration loaded successfully",
+                    Toast.LENGTH_LONG
+                ).show()
 
             } catch (e: Exception) {
-                showErrorDialog("Configuration Load Failed", "Failed to load configuration: ${e.message}")
+                showErrorDialog(
+                    "Configuration Load Failed",
+                    "Failed to load configuration: ${e.message}"
+                )
             }
         }
     }
@@ -355,7 +407,7 @@ class MainActivity : AppCompatActivity() {
             configFile.writeText(schedule.toCsv())
         } catch (e: Exception) {
             var msg = "Failed to save configuration: ${e.message}"
-            Log.e(TAG, msg)
+            Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
@@ -370,8 +422,69 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             var msg = "Failed to load saved configuration: ${e.message}"
-            Log.e(TAG, msg)
+            Logger.e(TAG, msg)
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showLogsDialog() {
+        val logs = Logger.getLogs()
+        
+        // Create a TextView that's focusable and scrollable with D-pad
+        val textView = TextView(this).apply {
+            text = if (logs.isEmpty()) "No logs available" else logs
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 14f
+            setPadding(24, 24, 24, 24)
+            setTextIsSelectable(true)
+            isFocusable = true
+            isFocusableInTouchMode = true
+            
+            // Enable D-pad scrolling
+            movementMethod = android.text.method.ScrollingMovementMethod()
+            isVerticalScrollBarEnabled = true
+            maxLines = Integer.MAX_VALUE
+            
+            // Make it easier to see focus on TV
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    setBackgroundColor(resources.getColor(android.R.color.holo_blue_dark, null))
+                } else {
+                    setBackgroundColor(resources.getColor(android.R.color.transparent, null))
+                }
+            }
+        }
+        
+        val scrollView = ScrollView(this).apply {
+            addView(textView)
+            isFocusable = true
+            isFocusableInTouchMode = true
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        }
+        
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Application Logs (Use D-pad ↑↓ to scroll)")
+            .setView(scrollView)
+            .setPositiveButton("Close") { _, _ -> }
+            .setNeutralButton("Clear Logs") { _, _ ->
+                Logger.clearLogs()
+                Toast.makeText(this, "Logs cleared", Toast.LENGTH_SHORT).show()
+            }
+            .create()
+        
+        dialog.show()
+        
+        // Make the dialog TV-friendly
+        dialog.window?.apply {
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.95).toInt(),
+                (resources.displayMetrics.heightPixels * 0.85).toInt()
+            )
+            
+            // Ensure the text view gets focus for D-pad navigation
+            decorView.post {
+                textView.requestFocus()
+            }
         }
     }
 }
@@ -383,14 +496,11 @@ private lateinit var remoteVpn: RemoteVpn
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Initialize RemoteVpn with context
         remoteVpn = RemoteVpn(this)
     }
 
     override fun onStart() {
         super.onStart()
-        // Bind to OpenVPN service when activity starts
         if (!remoteVpn.bindService()) {
             Toast.makeText(this, "Failed to bind to OpenVPN service", Toast.LENGTH_LONG).show()
         }
@@ -398,7 +508,6 @@ private lateinit var remoteVpn: RemoteVpn
 
     override fun onStop() {
         super.onStop()
-        // Unbind when activity stops
         remoteVpn.unbindService()
     }
 }
@@ -458,13 +567,13 @@ class RemoteVpn(private val context: Context) {
 
     private val mConnection = object : ServiceConnection {
         override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            Log.d(TAG, "Service connected")
+            Logger.d(TAG, "Service connected")
             mService = IOpenVPNAPIService.Stub.asInterface(service)
             onServiceConnected?.invoke()
         }
 
         override fun onServiceDisconnected(className: ComponentName) {
-            Log.d(TAG, "Service disconnected")
+            Logger.d(TAG, "Service disconnected")
             mService = null
             onServiceDisconnected?.invoke()
         }

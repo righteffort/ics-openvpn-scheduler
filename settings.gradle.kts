@@ -1,8 +1,8 @@
-pluginManagement {  
+pluginManagement {
     repositories {
         google()
         mavenCentral()
-	gradlePluginPortal()
+        gradlePluginPortal()
     }
 }
 

@@ -49,6 +49,13 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Stop VPN"
+        android:layout_marginBottom="16dp"/>
+
+    <Button
+        android:id="@+id/showLogsButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Show Logs"
         android:layout_marginBottom="24dp"/>
 
     <TextView

@@ -1,4 +1,4 @@
-package org.righteffort.openvpnscheduler
+package org.righteffort.vpnscheduler
 
 import java.time.Instant
 
@@ -30,7 +30,8 @@ class ScheduleStore private constructor(
             val records = mutableListOf<TimedAction>()
             var lastTimestamp = Instant.MIN
 
-            for (line in csv.lineSequence().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }) {
+            for (line in csv.lineSequence().map { it.substringBefore('#').trim() }
+                .filter { it.isNotEmpty() }) {
                 val parts = line.split(',').map { it.trim() }
                 require(parts.size >= 2) { "Command missing from `$line`" }
                 val ts = Instant.parse(parts[0])
@@ -39,17 +40,18 @@ class ScheduleStore private constructor(
                 }
                 val command = Command.valueOf(parts[1].uppercase())
                 val args = parts.drop(2)
-                
+
                 // Validate argument count based on command type
                 when (command) {
                     Command.START, Command.SET_DEFAULT, Command.SET_DEFAULT_AND_START -> {
-                        require(args.size == 1) { 
-                            "Command $command requires exactly one argument, got ${args.size} in line: $line" 
+                        require(args.size == 1) {
+                            "Command $command requires exactly one argument, got ${args.size} in line: $line"
                         }
                     }
+
                     Command.STOP -> {
-                        require(args.isEmpty()) { 
-                            "Command $command requires no arguments, got ${args.size} in line: $line" 
+                        require(args.isEmpty()) {
+                            "Command $command requires no arguments, got ${args.size} in line: $line"
                         }
                     }
                 }
@@ -63,7 +65,10 @@ class ScheduleStore private constructor(
 
     fun toCsv(): String {
         return actions.joinToString("\n") { timedAction ->
-	    (listOf(timedAction.timestamp.toString(), timedAction.action.command.toString()) + timedAction.action.arguments).joinToString(",")
-	}
+            (listOf(
+                timedAction.timestamp.toString(),
+                timedAction.action.command.toString()
+            ) + timedAction.action.arguments).joinToString(",")
+        }
     }
 }
