@@ -14,6 +14,7 @@
         android:required="false" />
 
     <application
+	android:name=".MainApplication"
         android:allowBackup="true"
         android:banner="@mipmap/ic_banner"
         android:icon="@mipmap/ic_launcher"

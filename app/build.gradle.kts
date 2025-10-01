@@ -38,5 +38,14 @@ android {
 
     buildFeatures {
         aidl = true
+	buildConfig = true
+    }
+
+    buildTypes {
+        getByName("release") {
+            // TODO: Use real signing keys
+	    logger.warn("Using debug signing for release")
+	    signingConfig = android.signingConfigs.getByName("debug")
+        }
     }
 }
