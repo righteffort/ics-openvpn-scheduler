@@ -27,8 +27,8 @@ interface PermissionHandler {
 
 class RemoteVpn(
     private val context: Context,
-    private val permissionHandler: PermissionHandler?  // Nullable - might not be available
-) {
+    private val permissionHandler: PermissionHandler?
+) : AutoCloseable {
     private var mService: IOpenVPNAPIService? = null
     private var isBound = false
     var onServiceReady: (() -> Unit)? = null
@@ -38,6 +38,7 @@ class RemoteVpn(
 
     private var permissionLauncher: ActivityResultLauncher<Intent>
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var mConnection: ServiceConnection
 
     private companion object {
         private const val TAG = "VPNSchedulerRemoteVpn"
@@ -71,6 +72,9 @@ class RemoteVpn(
                         override fun getContract() =
                             ActivityResultContracts.StartActivityForResult()
                     }
+
+        mConnection = createServiceConnection()
+        bindService()  // might fail, that's ok. We'll retry later.
     }
 
     private val statusCallback = object : IOpenVPNStatusCallback.Stub() {
@@ -82,38 +86,38 @@ class RemoteVpn(
         }
     }
 
-    private val mConnection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            Logger.i(TAG, "Service connected")
-            mService = IOpenVPNAPIService.Stub.asInterface(service)
+    private fun createServiceConnection(): ServiceConnection {
+        return object : ServiceConnection {
+            override fun onServiceConnected(className: ComponentName, service: IBinder) {
+                Logger.i(TAG, "Service connected")
+                mService = IOpenVPNAPIService.Stub.asInterface(service)
 
-            // Register status callback and notify service ready on background thread
-            serviceScope.launch {
-                executeWithPermission {
-                    registerStatusCallbackSafely()
-                }
-                // Call onServiceReady on main thread after permission handling
-                withContext(Dispatchers.Main) {
-                    onServiceReady?.invoke()
+                // Register status callback and notify service ready on background thread
+                serviceScope.launch {
+                    executeWithPermission {
+                        registerStatusCallbackSafely()
+                    }
+                    // Call onServiceReady on main thread after permission handling
+                    withContext(Dispatchers.Main) {
+                        onServiceReady?.invoke()
+                    }
                 }
             }
-        }
 
-        override fun onServiceDisconnected(className: ComponentName) {
-            Logger.i(TAG, "Service disconnected")
-            try {
-                mService?.unregisterStatusCallback(statusCallback)
-            } catch (e: Exception) {
-                Logger.e(TAG, "Error unregistering callback", e)
+            override fun onServiceDisconnected(className: ComponentName) {
+                Logger.i(TAG, "Service disconnected")
+                try {
+                    // TODO bad idea?
+                    // mService?.unregisterStatusCallback(statusCallback)
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Error unregistering callback", e)
+                }
+                mService = null
             }
-            mService = null
         }
     }
 
-    /**
-     * Bind to the OpenVPN for Android service
-     */
-    fun bindService(): Boolean {
+    private fun bindService(): Boolean {
         if (isBound) return true
 
         Logger.d(TAG, "service class name: ${IOpenVPNAPIService::class.java.name}")
@@ -125,12 +129,9 @@ class RemoteVpn(
         return isBound
     }
 
-    /**
-     * Unbind from the OpenVPN for Android service
-     */
-    fun unbindService() {
+    private fun unbindService() {
         if (isBound) {
-   	    Logger.i(TAG, "unbindService")
+            Logger.i(TAG, "unbindService")
             // Unregister callback on background thread to avoid StrictMode violations
             serviceScope.launch {
                 try {
@@ -216,6 +217,12 @@ class RemoteVpn(
     fun act(action: Action) {
         Logger.d(TAG, action.toString())
 
+        // Ensure service is bound before attempting action
+        if (!bindService()) {
+            Logger.e(TAG, "Failed to bind to VPN service")
+            return
+        }
+
         serviceScope.launch {
             executeWithPermission {
                 try {
@@ -238,6 +245,7 @@ class RemoteVpn(
                     }
 
                     // Execute the actual command
+                    // TODO: do this within a mutex.
                     executeVpnCommand(action)
                 } catch (e: Exception) {
                     Logger.e(TAG, "Error executing action: ${action.command}", e)
@@ -320,5 +328,9 @@ class RemoteVpn(
         } catch (e: RemoteException) {
             throw RuntimeException("Failed to get profiles", e)
         }
+    }
+
+    override fun close() {
+        unbindService()
     }
 }

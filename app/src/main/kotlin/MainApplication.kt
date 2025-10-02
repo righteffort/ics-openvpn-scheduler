@@ -11,6 +11,7 @@ import java.io.File
 class MainApplication : Application() {
 
     companion object {
+        private const val TAG = "VPNSchedulerApp"
         private const val CONFIG_FILE = "schedule_config.csv"
         private var instance: MainApplication? = null
 
@@ -59,13 +60,17 @@ class MainApplication : Application() {
         loadScheduleStoreAsync()
     }
 
+    // override fun onConfigurationChanged(newConfig: Configuration) {
+    //     super.onConfigurationChanged(newConfig)
+    //     // No action needed for configuration changes
+    // }
+
     fun updateScheduleStore(scheduleStore: ScheduleStore) {
         _scheduleStore = scheduleStore
         saveScheduleStore(scheduleStore)
     }
 
     private fun loadScheduleStoreAsync() {
-        // Use coroutines to avoid StrictMode violations
         applicationScope.launch {
             try {
                 val configFile = File(filesDir, CONFIG_FILE)
@@ -73,12 +78,14 @@ class MainApplication : Application() {
                     val content = configFile.readText()
                     _scheduleStore = ScheduleStore.fromCsv(content)
                     Logger.i(
-                        "MainApplication",
+                        TAG,
                         "Loaded schedule configuration with ${_scheduleStore?.let { "data" } ?: "no data"}")
+                } else {
+                    Logger.w(TAG, "$CONFIG_FILE not found")
                 }
             } catch (e: Exception) {
                 // TODO can we avoid this branch, and then never worry about null _scheduleStore?
-                Logger.e("MainApplication", "Failed to load schedule configuration", e)
+                Logger.e(TAG, "Failed to load schedule configuration", e)
             }
         }
     }
@@ -89,9 +96,9 @@ class MainApplication : Application() {
             try {
                 val configFile = File(filesDir, CONFIG_FILE)
                 configFile.writeText(scheduleStore.toCsv())
-                Logger.i("MainApplication", "Saved schedule configuration")
+                Logger.i(TAG, "Saved schedule configuration to $CONFIG_FILE")
             } catch (e: Exception) {
-                Logger.e("MainApplication", "Failed to save schedule configuration", e)
+                Logger.e(TAG, "Failed to save schedule configuration", e)
             }
         }
     }

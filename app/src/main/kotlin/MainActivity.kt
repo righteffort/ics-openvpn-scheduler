@@ -45,7 +45,6 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         private const val PREFS_NAME = "TextDownloaderPrefs"
         private const val KEY_LAST_URL = "last_url"
         private const val DOWNLOADS_DIR = "downloads"
-        private const val CONFIG_FILE = "schedule_config.csv"
         private const val TAG = "VPNScheduler"
     }
 
@@ -83,7 +82,7 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         }
 
         loadConfigButton.setOnClickListener {
-            filePickerLauncher.launch("text/*")
+            filePickerLauncher.launch("text/csv")
         }
 
         showLogsButton.setOnClickListener {
@@ -93,6 +92,8 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         loadSavedUrl()
         loadSavedConfig()
         refreshFilesList()
+
+        // TODO: this seems wrong, how about instead we provide MainApplication's remoteVpn with ourselves as permissionHandler ? (and maybe retract when we lose focus?)
         remoteVpn = RemoteVpn(this, this)
 
         // Set up callback to enable button when service is ready
@@ -140,19 +141,19 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         Logger.i(TAG, "Scheduled periodic VPN checks every 20 minutes")
     }
 
-    override fun onStart() {
-        super.onStart()
-        if (!remoteVpn.bindService()) {
-            val msg = "Failed to bind to OpenVPN service"
-            Logger.e(TAG, msg)
-            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-        }
-    }
+    // override fun onStart() {
+    //     super.onStart()
+    //     if (!remoteVpn.bindService()) {
+    //         val msg = "Failed to bind to OpenVPN service"
+    //         Logger.e(TAG, msg)
+    //         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    //     }
+    // }
 
-    override fun onStop() {
-        super.onStop()
-        // seems like a bad idea remoteVpn.unbindService()
-    }
+    // override fun onStop() {
+    //     super.onStop()
+    //     // seems like a bad idea remoteVpn.unbindService()
+    // }
 
     private fun downloadFile(urlString: String) {
         lifecycleScope.launch {

@@ -38,7 +38,7 @@ class UpdateVpnWorker(context: Context, params: WorkerParameters) : Worker(conte
             )
 
             // Get RemoteVpn instance from application and execute action
-            val remoteVpn = app.remoteVpn  // No null check needed
+            val remoteVpn = app.remoteVpn
             remoteVpn.act(activeAction.action)
 
             return Result.success()
