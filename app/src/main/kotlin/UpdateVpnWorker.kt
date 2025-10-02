@@ -3,6 +3,7 @@ package org.righteffort.vpnscheduler
 import android.content.Context
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import java.time.Instant
 
 class UpdateVpnWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
@@ -10,57 +11,41 @@ class UpdateVpnWorker(context: Context, params: WorkerParameters) : Worker(conte
         private const val TAG = "VPNSchedulerUpdateVpnWorker"
     }
 
-    // private val scheduleProcessor = ScheduleProcessor()
-
     override fun doWork(): Result {
-        Logger.i(TAG, "Background schedule check triggered")
-        return Result.success()
-        /*
-        return try {
+        Logger.i(TAG, "Schedule check triggered")
 
-            val scheduleJson = fetchSchedule()
-            val entries = scheduleProcessor.parseSchedule(scheduleJson)
-            val currentAction = scheduleProcessor.determineCurrentAction(entries, LocalDateTime.now())
+        try {
+            val app = MainApplication.getInstance()
 
-            if (currentAction != null) {
-                applyAction(currentAction)
+            // Get schedule from application
+            val scheduleStore = app.scheduleStore
+            if (scheduleStore == null) {
+                Logger.i(TAG, "No schedule configuration found")
+                return Result.success()
             }
 
-            Result.success()
+            // Get current time and find active action
+            val now = Instant.now()
+            val activeAction = scheduleStore.getActiveAction(now)
+            if (activeAction == null) {
+                Logger.i(TAG, "No applicable action for current time")
+                return Result.success()
+            }
+
+            Logger.i(
+                TAG,
+                "Found active action: ${activeAction.action.command} at ${activeAction.timestamp}"
+            )
+
+            // Get RemoteVpn instance from application and execute action
+            val remoteVpn = app.remoteVpn  // No null check needed
+            remoteVpn.act(activeAction.action)
+
+            return Result.success()
+
         } catch (e: Exception) {
-            Logger.e(TAG, "Background worker failed", e)
-            Result.retry()
+            Logger.e(TAG, "Error during schedule check", e)
+            return Result.failure()
         }
-    */
     }
-    /*
-        private fun fetchSchedule(): JSONArray {
-            val url = URL("https://your-server.com/vpn-schedule.json")
-            val response = url.readText()
-            return JSONArray(response)
-        }
-
-        private fun applyAction(action: String) {
-            val context = applicationContext
-
-            when {
-                action == "stop" -> {
-                    val intent = Intent(Intent.ACTION_MAIN)
-                    intent.setClassName("de.blinkt.openvpn", "de.blinkt.openvpn.api.DisconnectVPN")
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    context.startActivity(intent)
-                    Logger.i(TAG, "Applied action: stop")
-                }
-                action.startsWith("start:") -> {
-                    val profileName = action.substring(6)
-                    val intent = Intent(Intent.ACTION_MAIN)
-                    intent.setClassName("de.blinkt.openvpn", "de.blinkt.openvpn.api.ConnectVPN")
-                    intent.putExtra("de.blinkt.openvpn.api.profileName", profileName)
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    context.startActivity(intent)
-                    Logger.i(TAG, "Applied action: start:$profileName")
-                }
-            }
-        }
-        */
 }

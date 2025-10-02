@@ -36,7 +36,6 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
     private lateinit var urlEditText: EditText
     private lateinit var downloadButton: Button
     private lateinit var loadConfigButton: Button
-    private lateinit var stopButton: Button
     private lateinit var showLogsButton: Button
     private lateinit var filesContainer: LinearLayout
     private var currentSchedule: ScheduleStore? = null
@@ -71,7 +70,6 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         urlEditText = findViewById(R.id.urlEditText)
         downloadButton = findViewById(R.id.downloadButton)
         loadConfigButton = findViewById(R.id.loadConfigButton)
-        stopButton = findViewById(R.id.stopButton)
         showLogsButton = findViewById(R.id.showLogsButton)
         filesContainer = findViewById(R.id.filesContainer)
 
@@ -88,17 +86,9 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
             filePickerLauncher.launch("text/*")
         }
 
-        stopButton.setOnClickListener {
-            val action = Action(Command.STOP, emptyList())
-            remoteVpn.act(action)
-        }
-
         showLogsButton.setOnClickListener {
             showLogsDialog()
         }
-
-        // Initially disable the stop button
-        stopButton.isEnabled = false
 
         loadSavedUrl()
         loadSavedConfig()
@@ -108,12 +98,11 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         // Set up callback to enable button when service is ready
         remoteVpn.onServiceReady = {
             runOnUiThread {
-                stopButton.isEnabled = true
                 val msg = "OpenVPN service ready"
                 Logger.i(TAG, msg)
                 Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
                 schedulePeriodicCheck()
-                // TODO also check right now.
+                // TODO also check right now?
             }
         }
         WorkManager.getInstance(this)
@@ -129,6 +118,7 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
     }
 
     private fun schedulePeriodicCheck() {
+        // Always schedule the work - let the worker handle schedule presence/absence
         // TODO hardcoded short interval
         val workRequest = PeriodicWorkRequestBuilder<UpdateVpnWorker>(
             20,
@@ -143,9 +133,11 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "vpn_schedule_check",
-            ExistingPeriodicWorkPolicy.REPLACE,
+            ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
+
+        Logger.i(TAG, "Scheduled periodic VPN checks every 20 minutes")
     }
 
     override fun onStart() {
@@ -159,7 +151,7 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
 
     override fun onStop() {
         super.onStop()
-        remoteVpn.unbindService()
+        // seems like a bad idea remoteVpn.unbindService()
     }
 
     private fun downloadFile(urlString: String) {
@@ -412,7 +404,11 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
 
                 val schedule = ScheduleStore.fromCsv(content)
                 currentSchedule = schedule
-                saveConfig(schedule)
+
+                // Update the application's schedule store
+                val app = MainApplication.getInstance()
+                app.updateScheduleStore(schedule)
+
                 Toast.makeText(
                     this@MainActivity,
                     "Configuration loaded successfully",
@@ -428,30 +424,17 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         }
     }
 
-    private fun saveConfig(schedule: ScheduleStore) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val configFile = File(filesDir, CONFIG_FILE)
-                configFile.writeText(schedule.toCsv())
-            } catch (e: Exception) {
-                val msg = "Failed to save configuration: ${e.message}"
-                Logger.e(TAG, msg)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
 
     private fun loadSavedConfig() {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val configFile = File(filesDir, CONFIG_FILE)
-                if (configFile.exists()) {
-                    val content = configFile.readText()
-                    val schedule = ScheduleStore.fromCsv(content)
+                // Get schedule from application instead of loading from file
+                val app = MainApplication.getInstance()
+                val schedule = app.scheduleStore
+                if (schedule != null) {
                     withContext(Dispatchers.Main) {
                         currentSchedule = schedule
+
                         Toast.makeText(
                             this@MainActivity,
                             "Saved configuration loaded",
@@ -530,127 +513,3 @@ class MainActivity : AppCompatActivity(), PermissionHandler {
         }
     }
 }
-
-
-/* something like
-
-private lateinit var remoteVpn: RemoteVpn
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        remoteVpn = RemoteVpn(this)
-    }
-
-    override fun onStart() {
-        super.onStart()
-        if (!remoteVpn.bindService()) {
-            Toast.makeText(this, "Failed to bind to OpenVPN service", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        remoteVpn.unbindService()
-    }
-}
-
-
-
-3. Execute VPN Actions
-
-
-// Start a VPN profile
-val startAction = Action(Command.START, listOf("MyVPNProfile"))
-remoteVpn.act(startAction)
-
-// Stop VPN
-val stopAction = Action(Command.STOP, emptyList())
-remoteVpn.act(stopAction)
-
-// Set default profile
-val setDefaultAction = Action(Command.SET_DEFAULT, listOf("MyVPNProfile"))
-remoteVpn.act(setDefaultAction)
-
-// Set default and start
-val setDefaultAndStartAction = Action(Command.SET_DEFAULT_AND_START, listOf("MyVPNProfile"))
-remoteVpn.act(setDefaultAndStartAction)
-
-
-
-4. Using with ScheduleStore
-
-
-// Load a schedule from CSV
-val csvContent = """
-2024-01-01T08:00:00Z,START,WorkVPN
-2024-01-01T18:00:00Z,STOP
-2024-01-01T20:00:00Z,START,HomeVPN
-"""
-
-val schedule = ScheduleStore.fromCsv(csvContent)
-
-// Get current action and execute it
-val now = Instant.now()
-val currentAction = schedule.getActiveAction(now)
-currentAction?.let { timedAction ->
-    remoteVpn.act(timedAction.action)
-}
-
-
-
-5. Handle Service Connection State
-
-You might want to add a callback mechanism to know when the service is ready:
-
-
-class RemoteVpn(private val context: Context) {
-    var onServiceConnected: (() -> Unit)? = null
-    var onServiceDisconnected: (() -> Unit)? = null
-
-    private val mConnection = object : ServiceConnection {
-        override fun onServiceConnected(className: ComponentName, service: IBinder) {
-            Logger.d(TAG, "Service connected")
-            mService = IOpenVPNAPIService.Stub.asInterface(service)
-            onServiceConnected?.invoke()
-        }
-
-        override fun onServiceDisconnected(className: ComponentName) {
-            Logger.d(TAG, "Service disconnected")
-            mService = null
-            onServiceDisconnected?.invoke()
-        }
-    }
-}
-
-
-Then use it like:
-
-
-remoteVpn.onServiceConnected = {
-    // Service is ready, can now execute actions
-    val action = Action(Command.START, listOf("MyProfile"))
-    remoteVpn.act(action)
-}
-
-
-
-6. Error Handling
-
-The current implementation logs errors but doesn't propagate them. You might want to add error callbacks:
-
-
-remoteVpn.onError = { error ->
-    Toast.makeText(this, "VPN Error: $error", Toast.LENGTH_LONG).show()
-}
-
-
-
-Prerequisites
-
- • OpenVPN for Android app must be installed on the device
- • The user must grant VPN permissions when prompted
- • Profile names used in actions must exist in OpenVPN for Android
-
-This setup allows your app to programmatically control OpenVPN connections based on schedules or user actions.
-
-*/

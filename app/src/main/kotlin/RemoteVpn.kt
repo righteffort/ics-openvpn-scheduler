@@ -9,6 +9,7 @@ import android.os.IBinder
 import android.os.RemoteException
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityOptionsCompat
 import de.blinkt.openvpn.api.IOpenVPNAPIService
 import de.blinkt.openvpn.api.IOpenVPNStatusCallback
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +27,7 @@ interface PermissionHandler {
 
 class RemoteVpn(
     private val context: Context,
-    permissionHandler: PermissionHandler
+    private val permissionHandler: PermissionHandler?  // Nullable - might not be available
 ) {
     private var mService: IOpenVPNAPIService? = null
     private var isBound = false
@@ -43,8 +44,8 @@ class RemoteVpn(
     }
 
     init {
-        // Register permission launcher during initialization
-        permissionLauncher = permissionHandler.registerForActivityResult(
+        // Register permission launcher during initialization if handler is available
+        permissionLauncher = permissionHandler?.registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
@@ -53,6 +54,23 @@ class RemoteVpn(
                 onPermissionDenied()
             }
         }
+            ?: // Create a no-op launcher for background contexts
+                    object : ActivityResultLauncher<Intent>() {
+                        override fun launch(input: Intent?) {
+                            Logger.w(TAG, "Cannot launch permission request in background context")
+                        }
+
+                        override fun launch(
+                            input: Intent?,
+                            options: ActivityOptionsCompat?
+                        ) {
+                            launch(input)
+                        }
+
+                        override fun unregister() {}
+                        override fun getContract() =
+                            ActivityResultContracts.StartActivityForResult()
+                    }
     }
 
     private val statusCallback = object : IOpenVPNStatusCallback.Stub() {
@@ -104,14 +122,6 @@ class RemoteVpn(
         }
         Logger.d(TAG, "Intent action: ${intent.action}")
         isBound = context.bindService(intent, mConnection, Context.BIND_AUTO_CREATE)
-        /* this approach doesn't suffice
-        if (isBound) {
-           if (mService?.prepareVPNService() != null) {
-                Logger.e(TAG, "Permission to control service missing")
-                 unbindService()
-                 }
-        }
-        */
         return isBound
     }
 
@@ -120,6 +130,7 @@ class RemoteVpn(
      */
     fun unbindService() {
         if (isBound) {
+   	    Logger.i(TAG, "unbindService")
             // Unregister callback on background thread to avoid StrictMode violations
             serviceScope.launch {
                 try {
@@ -153,12 +164,18 @@ class RemoteVpn(
                 Logger.d(TAG, "Already have permission")
                 action()
             } else {
-                // Need permission, stash action and request it
-                Logger.i(TAG, "Permission required, storing action and requesting permission")
-                pendingAction = action
-
-                withContext(Dispatchers.Main) {
-                    permissionLauncher.launch(permissionIntent)
+                // Need permission
+                if (permissionHandler != null) {
+                    // We can handle UI permissions
+                    Logger.i(TAG, "Permission required, requesting permission")
+                    pendingAction = action
+                    withContext(Dispatchers.Main) {
+                        permissionLauncher.launch(permissionIntent)
+                    }
+                } else {
+                    // Can't handle UI permissions (background context)
+                    Logger.w(TAG, "Permission required but no UI available - dropping action")
+                    return
                 }
             }
         } catch (e: Exception) {
@@ -205,14 +222,17 @@ class RemoteVpn(
                     // Check VPN service permission
                     val vpnPermissionIntent = mService?.prepareVPNService()
                     if (vpnPermissionIntent != null) {
-                        Logger.e(TAG, "VPN permission required")
-                        pendingAction = {
-                            executeVpnCommand(action)
-                        }
-
-                        // Launch permission request on main thread
-                        withContext(Dispatchers.Main) {
-                            permissionLauncher.launch(vpnPermissionIntent)
+                        if (permissionHandler != null) {
+                            Logger.i(TAG, "VPN permission required, requesting permission")
+                            pendingAction = { executeVpnCommand(action) }
+                            withContext(Dispatchers.Main) {
+                                permissionLauncher.launch(vpnPermissionIntent)
+                            }
+                        } else {
+                            Logger.w(
+                                TAG,
+                                "VPN permission required but no UI available - dropping action"
+                            )
                         }
                         return@executeWithPermission
                     }

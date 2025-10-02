@@ -24,19 +24,20 @@ class ScheduleStore private constructor(
         /**
          * Parse CSV where each non-blank line is:
          *   <ISO-8601 timestamp>,<command>[,<optional arg>,...]
-         * Timestamps must be strictly ascending. Capitalized command must be a member of the Command enum.
+         * Timestamps must be strictly ascending. command when converted to uppercase must be a member of the Command enum.
          */
         fun fromCsv(csv: String): ScheduleStore {
             val records = mutableListOf<TimedAction>()
             var lastTimestamp = Instant.MIN
-
+            var lineNo = 0
+            // TODO: accumulate up to N errors rather than throwing on the first
             for (line in csv.lineSequence().map { it.substringBefore('#').trim() }
-                .filter { it.isNotEmpty() }) {
+                .filter { lineNo++; it.isNotEmpty() }) {
                 val parts = line.split(',').map { it.trim() }
-                require(parts.size >= 2) { "Command missing from `$line`" }
+                require(parts.size >= 2) { "$lineNo: Command missing from `$line`" }
                 val ts = Instant.parse(parts[0])
-                if (ts < lastTimestamp) {
-                    throw IllegalArgumentException("Timestamps must be ascending: $ts after $lastTimestamp")
+                if (ts <= lastTimestamp) {
+                    throw IllegalArgumentException("$lineNo: Timestamps must be strictly ascending: $ts after $lastTimestamp")
                 }
                 val command = Command.valueOf(parts[1].uppercase())
                 val args = parts.drop(2)
@@ -45,13 +46,13 @@ class ScheduleStore private constructor(
                 when (command) {
                     Command.START, Command.SET_DEFAULT, Command.SET_DEFAULT_AND_START -> {
                         require(args.size == 1) {
-                            "Command $command requires exactly one argument, got ${args.size} in line: $line"
+                            "$lineNo: Command $command requires exactly one argument, got ${args.size} in line: $line"
                         }
                     }
 
                     Command.STOP -> {
                         require(args.isEmpty()) {
-                            "Command $command requires no arguments, got ${args.size} in line: $line"
+                            "$lineNo: Command $command requires no arguments, got ${args.size} in line: $line"
                         }
                     }
                 }
