@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import java.util.concurrent.atomic.AtomicReference
 
+// TOOD: don't do the fancy stuff, revert that commit.
+
 object Logger {
 
     enum class Level(val value: Int) {

@@ -79,10 +79,14 @@ class RemoteVpn(
 
     private val statusCallback = object : IOpenVPNStatusCallback.Stub() {
         override fun newStatus(uuid: String?, state: String?, message: String?, level: String?) {
+            // TODO: would probably be nice to log *something* about interesting VPN state changes
+            /*
             Logger.i(
                 TAG,
                 "VPN Status - UUID=$uuid, State=$state, Message=$message, Level=$level"
             )
+
+             */
         }
     }
 
