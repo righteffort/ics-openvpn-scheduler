@@ -66,6 +66,7 @@ class LogBuffer private constructor(context: Context) {
     }
     */
 
+    // TODO: store the buffered logs in reverse order to avoid having to reverse them here
     fun getLogsReversed(): String {
         return lock.read {
             buffer.toString().lines()
